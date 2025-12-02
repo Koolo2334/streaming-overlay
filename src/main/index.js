@@ -1,127 +1,360 @@
-import { app, shell, BrowserWindow, ipcMain, screen, globalShortcut } from 'electron'
+import { app, BrowserWindow, ipcMain, screen, globalShortcut } from 'electron'
 import { join } from 'path'
-import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { electronApp, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { initPhysics } from './physics'
+import { initOBS, toggleStream, toggleMute, reconnectOBS, getObsStatus } from './obs_handler'
+// ★追加: YouTubeハンドラー
+import { initYouTube, connectYouTube, disconnectYouTube, getYouTubeStatus } from './youtube_handler'
+import Store from 'electron-store'
 
-// ウィンドウ参照を保持
+//app.disableHardwareAcceleration()
+app.commandLine.appendSwitch('disable-renderer-backgrounding')
+app.commandLine.appendSwitch('disable-background-timer-throttling')
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows')
+app.commandLine.appendSwitch('force-device-scale-factor', '1')
+app.commandLine.appendSwitch('high-dpi-support', '1')
+
+const store = new Store({
+  defaults: {
+    keybinds: {
+      toggleAdminInput: 'CommandOrControl+Alt+A',
+      toggleUserView: 'CommandOrControl+Alt+E',
+      toggleKeybindWin: 'CommandOrControl+Shift+Alt+K',
+      gatherWindows: 'CommandOrControl+Alt+G'
+    },
+    windowBounds: {},
+    obsConfig: {
+      url: 'ws://127.0.0.1:4455',
+      password: '',
+      micName: 'マイク'
+    },
+    // ★追加: YouTube設定
+    youtubeConfig: {
+      channelId: '' // チャンネルID または ハンドル(@user...)
+    },
+    commentLifeTime: 15000
+  }
+})
+
 let winAdmin = null
 let winUser = null
 let winOBS = null
+let winKeybind = null
+let winComment = null
+let winStatus = null
+let isAdminInteractive = false
 
 function createWindows() {
-  // モニター情報の取得（あなたの4Kモニターを取得）
   const primaryDisplay = screen.getPrimaryDisplay()
-  const { width, height } = primaryDisplay.bounds // ここで 3840, 2160 が取得されます
+  const { width, height } = primaryDisplay.bounds
 
-  // 共通のウィンドウ設定
+  // ハンドラ登録を先に行う
+  setupIpcHandlers()
+
   const commonConfig = {
     icon,
-    show: false, // 準備ができたら表示
-    frame: false, // 枠なし
-    transparent: true, // 透明
+    show: false,
+    frame: false,
+    transparent: true,
     hasShadow: false,
     autoHideMenuBar: true,
+    skipTaskbar: true, 
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
-      contextIsolation: true // セキュリティのためTrue推奨だが、今回は簡略化のためPreload経由
+      contextIsolation: true,
+      backgroundThrottling: false
     }
   }
 
-  // --- 1. Admin Window (管理者用: 4K画面の左上などに配置) ---
-  winAdmin = new BrowserWindow({
-    ...commonConfig,
-    width: 400,
-    height: 600,
-    x: 50,
-    y: 50,
-    alwaysOnTop: true // 最前面
+  // --- 1. Admin Window ---
+  const getBounds = (name, defaultBounds) => store.get(`windowBounds.${name}`, defaultBounds)
+  const saveBounds = (name, win) => {
+    if (win && !win.isDestroyed()) store.set(`windowBounds.${name}`, win.getBounds())
+  }
+
+  const adminBounds = getBounds('admin', { x: 50, y: 50, width: 400, height: 600 })
+  winAdmin = new BrowserWindow({ ...commonConfig, ...adminBounds, alwaysOnTop: true, resizable: true })
+  winAdmin.on('resized', () => saveBounds('admin', winAdmin))
+  winAdmin.on('moved', () => saveBounds('admin', winAdmin))
+  winAdmin.on('close', () => saveBounds('admin', winAdmin))
+  winAdmin.setIgnoreMouseEvents(true, { forward: false })
+  winAdmin.on('ready-to-show', () => {
+    winAdmin.show()
+    winAdmin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+    winAdmin.setAlwaysOnTop(true, 'screen-saver')
   })
-  // Adminは通常のマウス操作を受け付ける
-  winAdmin.on('ready-to-show', () => winAdmin.show())
-  
-  // ルーティング: AdminPanelを表示
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     winAdmin.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/index.html#/admin`)
   } else {
     winAdmin.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'admin' })
   }
-  // Adminをさらに強力な最前面（スクリーンセーバー級）にする
-  winAdmin.setAlwaysOnTop(true, 'screen-saver')
 
-
-  // --- 2. User Window (自分用: 4K全画面) ---
-  winUser = new BrowserWindow({
-    ...commonConfig,
-    width: width,   // 3840
-    height: height, // 2160
-    x: 0,
-    y: 0,
-    alwaysOnTop: true,
-    skipTaskbar: true // タスクバーに出さない
-  })
-  
-  // マウス操作を透過（ゲームに渡す）
+  // --- 2. User Window ---
+  winUser = new BrowserWindow({ ...commonConfig, width, height, x: 0, y: 0, alwaysOnTop: true })
   winUser.setIgnoreMouseEvents(true, { forward: true })
-  
-  winUser.on('ready-to-show', () => winUser.showInactive()) // アクティブにしない
-
+  winUser.on('ready-to-show', () => winUser.showInactive())
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     winUser.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/index.html#/user`)
   } else {
     winUser.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'user' })
   }
 
-
-  // --- 3. OBS Window (配信用: 1920x1080 固定) ---
-  winOBS = new BrowserWindow({
-    ...commonConfig,
-    width: 1920,
-    height: 1080,
-    x: 0,
-    y: 0,
-    resizable: false, // サイズ固定
-    alwaysOnTop: false, // 最背面（ゲームの下に隠す）
-    skipTaskbar: true
-  })
-
-  // OBS用はロード完了後に「表示するが、最小化して隠す」等のトリックが必要
-  // ここでは「表示して最背面に送る」処理を行う
+  // --- 3. OBS Window ---
+  winOBS = new BrowserWindow({ ...commonConfig, width: 1920, height: 1080, useContentSize: true, x: 0, y: 0, resizable: true, alwaysOnTop: false, focusable: false })
   winOBS.on('ready-to-show', () => {
     winOBS.showInactive()
+    winOBS.setContentSize(1920, 1080)
+    winOBS.setMinimumSize(1920, 1080)
+    winOBS.setMaximumSize(1920, 1080)
     winOBS.minimize()
     winOBS.restore()
-    winOBS.blur() // フォーカスを外す
+    winOBS.blur() 
     winOBS.setAlwaysOnTop(false)
   })
-  
-  // ルーティング: OBS用画面
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     winOBS.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/index.html#/obs`)
   } else {
     winOBS.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'obs' })
   }
 
-  // --- 物理エンジンの起動 ---
-  // 作成したウィンドウを渡して、座標同期を開始
+  // --- 4. Keybind Manager Window ---
+  winKeybind = new BrowserWindow({ ...commonConfig, width: 500, height: 400, x: 200, y: 200, alwaysOnTop: true })
+  winKeybind.setIgnoreMouseEvents(false)
+  winKeybind.on('ready-to-show', () => {
+    winKeybind.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  })
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    winKeybind.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/index.html#/keybind`)
+  } else {
+    winKeybind.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'keybind' })
+  }
+  winKeybind.hide()
+
+  // --- 5. Comment Window ---
+  const commentBounds = getBounds('comment', { x: 100, y: 800, width: 300, height: 400 })
+  winComment = new BrowserWindow({ ...commonConfig, ...commentBounds, alwaysOnTop: true, resizable: true })
+  winComment.on('resized', () => saveBounds('comment', winComment))
+  winComment.on('moved', () => saveBounds('comment', winComment))
+  winComment.on('close', () => saveBounds('comment', winComment))
+  winComment.setIgnoreMouseEvents(true, { forward: false })
+  winComment.on('ready-to-show', () => {
+    winComment.show()
+    winComment.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+    winComment.setAlwaysOnTop(true, 'normal')
+  })
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    winComment.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/index.html#/comment`)
+  } else {
+    winComment.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'comment' })
+  }
+
+  // --- 6. Status Window ---
+  const defaultStatusBounds = { x: width - 300, y: 100, width: 200, height: 100 }
+  const statusBounds = getBounds('status', defaultStatusBounds)
+  winStatus = new BrowserWindow({ ...commonConfig, ...statusBounds, alwaysOnTop: true, resizable: true })
+  winStatus.on('resized', () => saveBounds('status', winStatus))
+  winStatus.on('moved', () => saveBounds('status', winStatus))
+  winStatus.on('close', () => saveBounds('status', winStatus))
+  winStatus.setIgnoreMouseEvents(true, { forward: false })
+  winStatus.on('ready-to-show', () => {
+    winStatus.show()
+    winStatus.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+    winStatus.setAlwaysOnTop(true, 'normal')
+  })
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    winStatus.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/index.html#/status`)
+  } else {
+    winStatus.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'status' })
+  }
+
+  // --- 機能起動 ---
   initPhysics({ winAdmin, winUser, winOBS })
+  
+  const obsConfig = store.get('obsConfig')
+  initOBS({ winAdmin, winStatus }, obsConfig)
+
+  // ★追加: YouTube初期化
+  initYouTube({ winAdmin, winComment })
+  
+  registerShortcuts()
 }
 
-// アプリのライフサイクル設定
-app.whenReady().then(() => {
-  electronApp.setAppUserModelId('com.electron')
+function registerShortcuts() {
+  globalShortcut.unregisterAll()
+  const defaults = {
+    toggleAdminInput: 'CommandOrControl+Alt+A',
+    toggleUserView: 'CommandOrControl+Alt+E',
+    toggleKeybindWin: 'CommandOrControl+Shift+Alt+K',
+    gatherWindows: 'CommandOrControl+Alt+G'
+  }
+  const stored = store.get('keybinds') || {}
+  const keybinds = { ...defaults, ...stored }
 
-  createWindows()
+  if (keybinds.toggleAdminInput) {
+    globalShortcut.register(keybinds.toggleAdminInput, () => {
+      isAdminInteractive = !isAdminInteractive
+      const targetWindows = [winAdmin, winComment, winStatus]
+      targetWindows.forEach(win => {
+        if (win && !win.isDestroyed()) {
+          if (isAdminInteractive) win.setIgnoreMouseEvents(false)
+          else { win.setIgnoreMouseEvents(true, { forward: false }); win.blur() }
+          win.webContents.send('admin-mode-changed', isAdminInteractive)
+        }
+      })
+      if (isAdminInteractive && winAdmin) winAdmin.focus()
+    })
+  }
 
-  // ショートカット: Ctrl+Alt+E で自分用エフェクトの表示/非表示トグル（集中モード）
-  globalShortcut.register('CommandOrControl+Alt+E', () => {
-    if (winUser) {
-      if (winUser.isVisible()) winUser.hide()
-      else winUser.showInactive()
+  if (keybinds.toggleUserView) {
+    globalShortcut.register(keybinds.toggleUserView, () => {
+      if (winUser) {
+        if (winUser.isVisible()) winUser.hide()
+        else winUser.showInactive()
+      }
+    })
+  }
+
+  if (keybinds.toggleKeybindWin) {
+    globalShortcut.register(keybinds.toggleKeybindWin, () => {
+      if (!winKeybind) return
+      if (winKeybind.isVisible()) { winKeybind.hide() } else { winKeybind.show(); winKeybind.focus() }
+    })
+  }
+
+  if (keybinds.gatherWindows) {
+    globalShortcut.register(keybinds.gatherWindows, () => {
+      if (!isAdminInteractive) return
+      const { x, y } = screen.getCursorScreenPoint()
+      const targets = [
+        { win: winAdmin, width: 400, height: 600 },
+        { win: winComment, width: 300, height: 400 },
+        { win: winStatus, width: 200, height: 100 },
+        { win: winKeybind, width: 500, height: 400 }
+      ]
+      targets.forEach(({ win, width, height }) => {
+        if (win && !win.isDestroyed() && win.isVisible()) {
+          win.setBounds({ x: Math.round(x - width / 2), y: Math.round(y - height / 2), width, height })
+          win.moveTop()
+        }
+      })
+    })
+  }
+}
+
+function setupIpcHandlers() {
+  ipcMain.removeHandler('get-keybinds')
+  ipcMain.handle('get-keybinds', () => store.get('keybinds'))
+  
+  ipcMain.removeHandler('set-keybind')
+  ipcMain.handle('set-keybind', (event, { action, shortcut }) => {
+    try {
+      const current = store.get('keybinds')
+      store.set('keybinds', { ...current, [action]: shortcut })
+      registerShortcuts()
+      return true
+    } catch (e) { console.error(e); return false }
+  })
+
+  // OBS
+  ipcMain.removeHandler('get-obs-config')
+  ipcMain.handle('get-obs-config', () => store.get('obsConfig'))
+  ipcMain.removeHandler('set-obs-config')
+  ipcMain.handle('set-obs-config', async (event, config) => {
+    try {
+      store.set('obsConfig', config)
+      await reconnectOBS(config)
+      return true
+    } catch (e) { console.error(e); return false }
+  })
+  ipcMain.removeHandler('get-obs-status')
+  ipcMain.handle('get-obs-status', () => getObsStatus())
+
+  // ★追加: YouTube設定
+  ipcMain.removeHandler('get-youtube-config')
+  ipcMain.handle('get-youtube-config', () => store.get('youtubeConfig'))
+  
+  ipcMain.removeHandler('set-youtube-config')
+  ipcMain.handle('set-youtube-config', (event, config) => {
+    try {
+      store.set('youtubeConfig', config)
+      return true
+    } catch (e) { return false }
+  })
+
+  // ★追加: YouTube操作
+  ipcMain.removeHandler('connect-youtube')
+  ipcMain.handle('connect-youtube', async (event, channelId) => {
+    return await connectYouTube(channelId)
+  })
+  
+  ipcMain.removeHandler('disconnect-youtube')
+  ipcMain.handle('disconnect-youtube', () => {
+    disconnectYouTube()
+    return true
+  })
+
+  ipcMain.removeHandler('get-youtube-status')
+  ipcMain.handle('get-youtube-status', () => getYouTubeStatus())
+
+
+  // ★追加: コメント寿命設定のハンドラ
+  ipcMain.removeHandler('get-comment-life-time')
+  ipcMain.handle('get-comment-life-time', () => store.get('commentLifeTime'))
+
+  ipcMain.removeHandler('set-comment-life-time')
+  ipcMain.handle('set-comment-life-time', (event, ms) => {
+    store.set('commentLifeTime', ms)
+    return true
+  })
+
+  // ★修正: テスト生成時の寿命適用
+  ipcMain.removeAllListeners('spawn-comment')
+  ipcMain.on('spawn-comment', (event, { text, color }) => {
+    if (winComment && !winComment.isDestroyed()) {
+      winComment.webContents.send('new-comment', { text, color })
+    }
+    
+    // storeから設定を取得して物理エンジンに渡す
+    // physics.js は mainプロセス内なので、ここで import している spawnPhysicsComment を使えばOK
+    // ただし spawnPhysicsComment は index.js では import されていない場合があるので確認
+    // (physics.js で export しているので、index.js の冒頭で import してください)
+    
+    // ↓ index.js 冒頭の import に spawnPhysicsComment が無い場合は追加してください
+    // import { initPhysics, spawnPhysicsComment } from './physics' 
+    
+    const lifeTime = store.get('commentLifeTime')
+    spawnPhysicsComment(text, color, lifeTime)
+  })
+
+  ipcMain.removeAllListeners('resize-window')
+  ipcMain.on('resize-window', (event, { width, height }) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (win) {
+      const [currentW, currentH] = win.getContentSize()
+      if (currentW !== width || currentH !== height) {
+        win.setContentSize(Math.ceil(width), Math.ceil(height))
+      }
     }
   })
 
+  ipcMain.removeAllListeners('toggle-click-through')
+  ipcMain.on('toggle-click-through', (event, ignore) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (win) win.setIgnoreMouseEvents(ignore, { forward: true })
+  })
+
+  ipcMain.removeAllListeners('update-status')
+  ipcMain.on('update-status', async (event, status) => {
+    if (status.isStreaming !== undefined) await toggleStream(status.isStreaming)
+    if (status.micMuted !== undefined) await toggleMute(status.micMuted)
+  })
+}
+
+app.whenReady().then(() => {
+  electronApp.setAppUserModelId('com.electron')
+  createWindows()
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindows()
   })
@@ -131,11 +364,4 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
-})
-
-// IPC: ウィンドウ操作系
-ipcMain.on('toggle-click-through', (event, ignore) => {
-  // 特定のボタンの上に来た時だけマウス操作を有効化するための処理
-  const win = BrowserWindow.fromWebContents(event.sender)
-  if (win) win.setIgnoreMouseEvents(ignore, { forward: true })
 })

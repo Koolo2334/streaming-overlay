@@ -31,14 +31,12 @@ body, html, #root {
 }
 
 /* --- Admin Panel Styles --- */
+/* Admin Panel Styles の修正 */
 .admin-container {
-  background-color: rgba(30, 30, 30, 0.9); /* 半透明の黒背景 */
-  color: #fff;
-  padding: 20px;
+  /* 固定幅を削除し、親ウィンドウに追従 */
+  width: 100%;
   height: 100%;
-  overflow-y: auto;
-  font-family: monospace;
-  border-left: 4px solid #00d4ff; /* アクセントカラー */
+  /* ... */
 }
 
 .admin-container h2 {
@@ -97,23 +95,68 @@ body, html, #root {
   background: #a71d2a;
 }
 
+/* 入力欄をレスポンシブに */
 .control-group {
-  margin-bottom: 10px;
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-wrap: wrap; /* 狭い時は折り返し */
 }
 
 .control-group label {
-  width: 50px;
+  min-width: 30px;
 }
 
 .control-group input {
-  flex: 1;
+  flex: 1; /* 余った幅を埋める */
+  min-width: 100px; /* 最小幅確保 */
 }
 
 .status-bar {
   margin-top: 20px;
   font-size: 0.8rem;
   color: #0f0;
+}
+
+/* --- Window Dragging --- */
+.drag-handle {
+  -webkit-app-region: drag; /* これがある場所を掴んでウィンドウ移動できる */
+  width: 100%;
+  height: 30px;
+  background: rgba(0, 212, 255, 0.2);
+  cursor: move;
+  display: flex;
+  align-items: center;
+  padding-left: 10px;
+  font-size: 0.8rem;
+  color: #00d4ff;
+  border-bottom: 1px solid rgba(0, 212, 255, 0.3);
+}
+
+/* 操作不可（透過）モード時のスタイル */
+.admin-container.locked .drag-handle {
+  display: none; /* ロック中はドラッグバーを隠す（または色を変える） */
+}
+
+.admin-container.locked {
+  border-left-color: #555; /* ロック中は枠線の色を地味にする */
+  opacity: 0.7; /* 少し薄くする */
+}
+
+/* ★追加: リサイズ可能なコンテナ */
+.resizable-container {
+  width: 100%;
+  height: 100%;
+  overflow: hidden; /* 中身がはみ出さないように */
+  position: relative;
+}
+
+/* 操作モード時のみリサイズハンドルを有効化 */
+.interactive .resizable-container,
+.admin-container.enable-mouse { /* AdminPanel用 */
+  resize: both; /* 両方向にリサイズ可能 */
+  overflow: auto; /* ハンドルを表示するために必要 */
+}
+
+/* ハンドルの見た目調整（ブラウザ標準だが少し見やすく） */
+::-webkit-resizer {
+  background-color: rgba(0, 212, 255, 0.5);
 }

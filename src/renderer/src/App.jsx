@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react'
 import EffectCanvas from './components/EffectCanvas'
 import AdminPanel from './components/AdminPanel'
+import KeybindManager from './components/KeybindManager'
+import CommentWindow from './components/CommentWindow' // 追加
+import StatusWindow from './components/StatusWindow'   // 追加
 
-// ハッシュ取得関数（変更なし）
 const getHashRoute = () => {
   const hash = window.location.hash
   const route = hash.replace(/^#\/?/, '')
@@ -13,34 +15,34 @@ function App() {
   const [currentHash, setCurrentHash] = useState(getHashRoute())
 
   useEffect(() => {
-    // 1. ハッシュ変更検知
     const handleHashChange = () => {
       setCurrentHash(getHashRoute())
     }
     window.addEventListener('hashchange', handleHashChange)
 
-    // ★追加: 現在のルートに合わせてウィンドウタイトルを変更
-    // これでOBSが「別のウィンドウだ」と認識できるようになります
     if (currentHash === 'user') {
       document.title = "Overlay_USER_View"
     } else if (currentHash === 'obs') {
       document.title = "Overlay_OBS_View"
     } else if (currentHash === 'admin') {
       document.title = "Overlay_ADMIN_Panel"
+    } else if (currentHash === 'keybind') {
+      document.title = "Overlay_KEYBIND_Manager"
+    } else if (currentHash === 'comment') { // 追加
+      document.title = "Overlay_COMMENT_Box"
+    } else if (currentHash === 'status') {  // 追加
+      document.title = "Overlay_STATUS_Box"
     }
 
     return () => window.removeEventListener('hashchange', handleHashChange)
-  }, [currentHash]) // currentHashが変わるたびに実行
+  }, [currentHash])
 
-  // --- ルーティング分岐（変更なし） ---
-  
+  // --- ルーティング分岐 ---
+
   if (currentHash === 'user') {
     return (
       <div className="app-container">
         <EffectCanvas viewMode="user" />
-        <div style={{ position: 'absolute', top: 10, right: 10, color: 'white', fontSize: '2rem', opacity: 0.5, pointerEvents: 'none' }}>
-          User View
-        </div>
       </div>
     )
   }
@@ -55,6 +57,20 @@ function App() {
 
   if (currentHash === 'admin') {
     return <AdminPanel />
+  }
+
+  if (currentHash === 'keybind') {
+    return <KeybindManager />
+  }
+
+  // 追加: コメントウィンドウ
+  if (currentHash === 'comment') {
+    return <CommentWindow />
+  }
+
+  // 追加: ステータスウィンドウ
+  if (currentHash === 'status') {
+    return <StatusWindow />
   }
 
   return <div>Unknown Route: {currentHash}</div>
