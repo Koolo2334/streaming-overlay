@@ -1,110 +1,147 @@
 import { ipcMain } from 'electron'
 import Matter from 'matter-js'
 
-// ★ 仮想物理ワールドのサイズ（配信画面の解像度：FHD）
-// 4Kモニターであっても、物理演算は「配信画面(1920x1080)」を基準に行います
 const VIRTUAL_WIDTH = 1920
 const VIRTUAL_HEIGHT = 1080
 
-// 物理エンジンのインスタンス保持用
 let engine
-let runner
 let intervalId
 
 export function initPhysics(windows) {
-  // 1. エンジン作成
   engine = Matter.Engine.create()
   const world = engine.world
 
-  // 2. 壁と床を作成（コメントが画面外に永遠に落ちないように受け皿を作る）
-  const wallOptions = { isStatic: true, render: { visible: false } } // 固定、見えない
+  const wallOptions = { isStatic: true, render: { visible: false } }
   const ground = Matter.Bodies.rectangle(VIRTUAL_WIDTH / 2, VIRTUAL_HEIGHT + 50, VIRTUAL_WIDTH, 100, wallOptions)
   const leftWall = Matter.Bodies.rectangle(-50, VIRTUAL_HEIGHT / 2, 100, VIRTUAL_HEIGHT, wallOptions)
   const rightWall = Matter.Bodies.rectangle(VIRTUAL_WIDTH + 50, VIRTUAL_HEIGHT / 2, 100, VIRTUAL_HEIGHT, wallOptions)
 
   Matter.World.add(world, [ground, leftWall, rightWall])
 
-  // 3. ループ処理 (約60FPS)
-  // Matter.Runnerを使うとNode.js環境で安定しないことがあるため、setIntervalで回します
   const fps = 60
   intervalId = setInterval(() => {
     Matter.Engine.update(engine, 1000 / fps)
+    
+    // ★追加: 寿命チェック
+    removeOldBodies()
+    
     broadcastPositions(windows)
   }, 1000 / fps)
 
-  // 4. IPCイベントリスナー（レンダラーからの指令を受け取る）
   setupIpcListeners()
 
   console.log('Physics Engine Started')
 }
 
-// 座標データを各ウィンドウに送信する関数
+// ★追加: 寿命が切れたボディを削除する関数
+function removeOldBodies() {
+  const bodies = Matter.Composite.allBodies(engine.world)
+  const now = Date.now()
+
+  const bodiesToRemove = bodies.filter(body => {
+    // 静的オブジェクト（壁や床）は削除しない
+    if (body.isStatic) return false
+    
+    // 寿命設定があり、かつ生成から時間が経過していたら削除対象
+    if (body.lifeTime && body.createdAt) {
+      return (now - body.createdAt) > body.lifeTime
+    }
+    return false
+  })
+
+  if (bodiesToRemove.length > 0) {
+    Matter.World.remove(engine.world, bodiesToRemove)
+  }
+}
+
 function broadcastPositions(windows) {
   const { winUser, winOBS } = windows
   const bodies = Matter.Composite.allBodies(engine.world)
 
-  // 必要なデータだけ抽出して軽量化
   const syncData = bodies.map((body) => ({
     id: body.id,
     x: body.position.x,
     y: body.position.y,
     angle: body.angle,
     label: body.label,
-    width: body.width,   // カスタムプロパティ（後述のスポーン時に入れる）
+    width: body.width,
     height: body.height,
-    color: body.color    // 色情報など
+    color: body.color,
+    text: body.text
   }))
 
-  // 自分用ウィンドウへ送信 (存在すれば)
   if (winUser && !winUser.isDestroyed()) {
     winUser.webContents.send('physics-update', syncData)
   }
-
-  // OBS用ウィンドウへ送信 (存在すれば)
   if (winOBS && !winOBS.isDestroyed()) {
     winOBS.webContents.send('physics-update', syncData)
   }
 }
 
-// コメント生成などのイベント設定
-function setupIpcListeners() {
-  // コメント生成リクエスト
-  ipcMain.on('spawn-comment', (event, { text, color }) => {
-    const x = Math.random() * (VIRTUAL_WIDTH - 200) + 100
-    const y = -100 // 画面上部から
-    const width = text.length * 20 + 40 // 文字数に応じた幅（簡易計算）
-    const height = 60
+// ★変更: 引数に lifeTime を追加
+export function spawnPhysicsComment(text, color, lifeTime = 15000) {
+  if (!engine) return
 
-    const body = Matter.Bodies.rectangle(x, y, width, height, {
-      restitution: 0.8, // 跳ね返り係数
-      friction: 0.005,
-      label: 'comment',
-      // カスタムプロパティとして保存
-      width: width,
-      height: height,
-      color: color || '#FFFFFF',
-      text: text
-    })
-    
-    // Matter.jsのBodyオブジェクトに直接カスタムプロパティを生やす
-    body.width = width
-    body.height = height
-    body.color = color || '#FFFFFF'
-    body.text = text
+  // --- 幅の計算ロジック修正 ---
+  // 文字コードを見て幅を積算する
+  let textWidth = 0
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i)
+    // 256以上の文字コード（日本語など）は全角扱い、それ以外は半角扱い
+    // ※フォントサイズ24px想定で、少し余裕を持たせた数値にする
+    if (code > 255) {
+      textWidth += 26 // 全角文字の幅
+    } else {
+      textWidth += 16 // 半角文字の幅
+    }
+  }
+  
+  const width = textWidth + 60 // パディング(余白)も少し広げる (+40 -> +60)
+  const height = 60
+  
+  // 出現位置をランダムに（画面幅に収まるように調整）
+  const x = Math.random() * (VIRTUAL_WIDTH - width - 100) + (width / 2) + 50
+  const y = -100
 
-    Matter.World.add(engine.world, body)
-  })
-
-  // 重力操作（管理者パネル用）
-  ipcMain.on('set-gravity', (event, { x, y }) => {
-    engine.world.gravity.x = x
-    engine.world.gravity.y = y
+  const body = Matter.Bodies.rectangle(x, y, width, height, {
+    restitution: 0.8,
+    friction: 0.005,
+    label: 'comment',
+    // カスタムプロパティ
+    width: width,
+    height: height,
+    color: color || '#FFFFFF',
+    text: text,
+    createdAt: Date.now(),
+    lifeTime: lifeTime
   })
   
-  // ワールドリセット
+  // Matter.jsのBodyオブジェクトに直接生やす
+  body.width = width
+  body.height = height
+  body.color = color || '#FFFFFF'
+  body.text = text
+  body.createdAt = Date.now()
+  body.lifeTime = lifeTime
+
+  Matter.World.add(engine.world, body)
+}
+
+function setupIpcListeners() {
+  // IPC経由の場合も、メインプロセス側で寿命設定を渡すため、ここはシンプルな呼び出しのままでOK
+  // (index.js側で引数を制御します)
+  ipcMain.on('set-gravity', (event, { x, y }) => {
+    if (engine) {
+      engine.world.gravity.x = x
+      engine.world.gravity.y = y
+    }
+  })
+  
   ipcMain.on('clear-world', () => {
-    Matter.Composite.clear(engine.world, false, true)
-    // 壁などは再追加が必要になるため、ここでは簡易的に「壁以外のBodyを削除」するロジックにするのがベター
-    // 今回は省略
+    if (engine) {
+      const bodies = Matter.Composite.allBodies(engine.world)
+      const nonStaticBodies = bodies.filter(b => !b.isStatic)
+      Matter.Composite.remove(engine.world, nonStaticBodies)
+    }
   })
 }
