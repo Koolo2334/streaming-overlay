@@ -72,9 +72,9 @@ const LuckyLogWindow = () => {
               {/* LuckyLogは常に金色 */}
               <span className="log-author" style={{ color: '#ffd700' }}>{log.authorName || 'Guest'}</span>
               
-              {/* バッジ */}
+              {/* ★修正: URLチェック */}
               {log.authorBadges && log.authorBadges.map((b, k) => (
-                <img key={k} src={b.url} alt={b.label} className="badge-icon" title={b.label} referrerPolicy="no-referrer" />
+                b.url ? <img key={k} src={b.url} alt={b.label} className="badge-icon" title={b.label} referrerPolicy="no-referrer" /> : null
               ))}
 
               <span className="log-time">{log.timestamp}</span>

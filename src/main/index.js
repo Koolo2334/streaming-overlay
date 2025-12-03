@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, screen, globalShortcut } from 'electron'
+import { app, BrowserWindow, ipcMain, screen, globalShortcut, session } from 'electron'
 import { join } from 'path'
 import { electronApp, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
@@ -39,12 +39,22 @@ let winOBS = null
 let winKeybind = null
 let winComment = null
 let winStatus = null
-let winLucky = null // ★追加: LuckyLog用ウィンドウ
+let winLucky = null
 let isAdminInteractive = false
 
 function createWindows() {
   const primaryDisplay = screen.getPrimaryDisplay()
   const { width, height } = primaryDisplay.bounds
+
+  // ★追加: リファラー削除処理 (403 Forbidden対策の決定版)
+  session.defaultSession.webRequest.onBeforeSendHeaders(
+    { urls: ['*://*.googleusercontent.com/*', '*://*.ggpht.com/*', '*://*.youtube.com/*'] },
+    (details, callback) => {
+      delete details.requestHeaders['Referer']
+      delete details.requestHeaders['Origin']
+      callback({ requestHeaders: details.requestHeaders })
+    }
+  )
 
   setupIpcHandlers()
 
@@ -60,7 +70,8 @@ function createWindows() {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
       contextIsolation: true,
-      backgroundThrottling: false
+      backgroundThrottling: false,
+      webSecurity: false // ★念のため追加 (CSP問題回避)
     }
   }
 
@@ -69,7 +80,7 @@ function createWindows() {
     if (win && !win.isDestroyed()) store.set(`windowBounds.${name}`, win.getBounds())
   }
 
-  // --- 1. Admin Window ---
+  // --- 1. Admin ---
   const adminBounds = getBounds('admin', { x: 50, y: 50, width: 400, height: 600 })
   winAdmin = new BrowserWindow({ ...commonConfig, ...adminBounds, alwaysOnTop: true, resizable: true })
   winAdmin.on('resized', () => saveBounds('admin', winAdmin))
@@ -87,7 +98,7 @@ function createWindows() {
     winAdmin.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'admin' })
   }
 
-  // --- 2. User Window ---
+  // --- 2. User ---
   winUser = new BrowserWindow({ ...commonConfig, width, height, x: 0, y: 0, alwaysOnTop: true })
   winUser.setIgnoreMouseEvents(true, { forward: true })
   winUser.on('ready-to-show', () => winUser.showInactive())
@@ -97,7 +108,7 @@ function createWindows() {
     winUser.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'user' })
   }
 
-  // --- 3. OBS Window ---
+  // --- 3. OBS ---
   winOBS = new BrowserWindow({ ...commonConfig, width: 1920, height: 1080, useContentSize: true, x: 0, y: 0, resizable: true, alwaysOnTop: false, focusable: false })
   winOBS.on('ready-to-show', () => {
     winOBS.showInactive()
@@ -115,12 +126,10 @@ function createWindows() {
     winOBS.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'obs' })
   }
 
-  // --- 4. Keybind Manager Window ---
+  // --- 4. Keybind ---
   winKeybind = new BrowserWindow({ ...commonConfig, width: 500, height: 400, x: 200, y: 200, alwaysOnTop: true })
   winKeybind.setIgnoreMouseEvents(false)
-  winKeybind.on('ready-to-show', () => {
-    winKeybind.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-  })
+  winKeybind.on('ready-to-show', () => winKeybind.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true }))
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     winKeybind.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/index.html#/keybind`)
   } else {
@@ -128,7 +137,7 @@ function createWindows() {
   }
   winKeybind.hide()
 
-  // --- 5. Comment Window ---
+  // --- 5. Comment ---
   const commentBounds = getBounds('comment', { x: 100, y: 800, width: 300, height: 400 })
   winComment = new BrowserWindow({ ...commonConfig, ...commentBounds, alwaysOnTop: true, resizable: true })
   winComment.on('resized', () => saveBounds('comment', winComment))
@@ -146,7 +155,7 @@ function createWindows() {
     winComment.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'comment' })
   }
 
-  // --- 6. Status Window ---
+  // --- 6. Status ---
   const statusBounds = getBounds('status', { x: width - 300, y: 100, width: 200, height: 100 })
   winStatus = new BrowserWindow({ ...commonConfig, ...statusBounds, alwaysOnTop: true, resizable: true })
   winStatus.on('resized', () => saveBounds('status', winStatus))
@@ -164,7 +173,7 @@ function createWindows() {
     winStatus.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'status' })
   }
 
-  // --- 7. Lucky Log Window (★復活) ---
+  // --- 7. Lucky Log ---
   const luckyBounds = getBounds('lucky', { x: 100, y: 100, width: 300, height: 200 })
   winLucky = new BrowserWindow({ ...commonConfig, ...luckyBounds, alwaysOnTop: true, resizable: true })
   winLucky.on('resized', () => saveBounds('lucky', winLucky))
@@ -182,19 +191,16 @@ function createWindows() {
     winLucky.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'lucky' })
   }
 
-  // --- 機能起動 ---
-  // ★重要: 全てのウィンドウ参照を渡す
+  // --- Start ---
   initPhysics({ winAdmin, winUser, winOBS, winLucky })
-  
   const obsConfig = store.get('obsConfig')
   initOBS({ winAdmin, winStatus }, obsConfig)
-
-  // ★重要: winOBSとwinLuckyも含めて渡す
   initYouTube({ winAdmin, winComment, winOBS, winLucky })
   
   registerShortcuts()
 }
 
+// ... (registerShortcuts, setupIpcHandlers は既存のまま) ...
 function registerShortcuts() {
   globalShortcut.unregisterAll()
   const defaults = {
@@ -321,7 +327,6 @@ function setupIpcHandlers() {
     if (winComment && !winComment.isDestroyed()) {
       winComment.webContents.send('new-comment', { text, color })
     }
-    // spawnPhysicsComment は physics.js でインポート済み
     spawnPhysicsComment(text, color)
   })
 

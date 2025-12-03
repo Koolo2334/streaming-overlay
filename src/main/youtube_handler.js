@@ -12,10 +12,26 @@ export function initYouTube(windows) {
   windowsRef = windows
 }
 
-// ヘルパー: URLを安全な形式(https)に変換
+// ★修正: 超強力版 URL変換関数
+// 空白除去を行い、正規表現を使わずに確実に置換します
 const safeUrl = (url) => {
-  if (!url) return ''
-  return url.replace(/^http:\/\//, 'https://')
+  if (!url || typeof url !== 'string') return ''
+  
+  // 1. 前後の空白を削除 (これが見えない原因の可能性があります)
+  const trimmed = url.trim()
+
+  // 2. プロトコル相対URL (//) の処理
+  if (trimmed.startsWith('//')) {
+    return `https:${trimmed}`
+  }
+  
+  // 3. http:// の処理 (https:// に強制変換)
+  if (trimmed.startsWith('http://')) {
+    return `https://${trimmed.substring(7)}`
+  }
+  
+  // それ以外 (https:// など)
+  return trimmed
 }
 
 export async function connectYouTube(channelIdOrUrl) {
@@ -45,10 +61,10 @@ export async function connectYouTube(channelIdOrUrl) {
       let color = `hsl(${Math.random() * 360}, 70%, 60%)` 
       
       const authorName = chatItem.author.name
-      // ★修正: HTTPSに変換
+      // ★ここで強力版 safeUrl を適用
       const authorIcon = safeUrl(chatItem.author.thumbnail?.url)
 
-      // メンバー判定
+      // --- メンバー判定ロジック (成功しているので維持) ---
       let isMember = Boolean(chatItem.author.isChatSponsor)
 
       if (!isMember && chatItem.author.badge) {
@@ -57,15 +73,18 @@ export async function connectYouTube(channelIdOrUrl) {
           if (!b || !b.label) return false
           const label = b.label.toLowerCase()
           if (label.includes('member') || label.includes('メンバー')) return true
-          
           const isMod = label.includes('moderator') || label.includes('モデレーター')
           const isVerified = label.includes('verified') || label.includes('確認済み') || label.includes('authenticated')
           const isOwner = label.includes('owner') || label.includes('オーナー')
-          
           return !isMod && !isVerified && !isOwner
         })
       }
       
+      // ログ確認用
+      console.log(`[Message] ${authorName} (Member: ${isMember})`)
+      // ここで Safe: https://... になっているか確認できます
+      console.log(`[Icon URL] Original: ${chatItem.author.thumbnail?.url} -> Safe: ${authorIcon}`)
+
       const superchat = chatItem.superchat
       const supersticker = chatItem.supersticker
 
@@ -77,14 +96,14 @@ export async function connectYouTube(channelIdOrUrl) {
 
       const { winComment, winOBS } = windowsRef || {}
       
-      // ★修正: バッジURLもHTTPS化して配列にする
+      // バッジURLも変換
       const rawBadges = chatItem.author.badge ? [].concat(chatItem.author.badge) : []
       const authorBadges = rawBadges.map(b => ({
         ...b,
         url: safeUrl(b.url)
       }))
 
-      // ステッカーURLもHTTPS化
+      // ステッカーURLも変換
       if (supersticker && supersticker.sticker) {
         supersticker.sticker.url = safeUrl(supersticker.sticker.url)
       }

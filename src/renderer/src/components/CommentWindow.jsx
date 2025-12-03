@@ -77,9 +77,6 @@ const CommentWindow = () => {
                   <div className="comment-header">
                     {c.authorIcon && <img src={c.authorIcon} alt="" className="author-icon" referrerPolicy="no-referrer" />}
                     <div className="comment-author" style={nameStyle}>{c.authorName || 'Anonymous'}</div>
-                    {c.authorBadges && c.authorBadges.map((b, k) => (
-                      <img key={k} src={b.url} alt={b.label} className="badge-icon" title={b.label} referrerPolicy="no-referrer" />
-                    ))}
                   </div>
                   <div className="sc-amount">{c.superchat.amount}</div>
                 </div>
@@ -89,14 +86,16 @@ const CommentWindow = () => {
                 <div className="comment-header">
                   {c.authorIcon && <img src={c.authorIcon} alt="" className="author-icon" referrerPolicy="no-referrer" />}
                   <div className="comment-author" style={nameStyle}>{c.authorName || 'Anonymous'}</div>
+                  {/* ★修正: URLがある場合のみレンダリングする (エラー対策) */}
                   {c.authorBadges && c.authorBadges.map((b, k) => (
-                    <img key={k} src={b.url} alt={b.label} className="badge-icon" title={b.label} referrerPolicy="no-referrer" />
+                    b.url ? <img key={k} src={b.url} alt={b.label} className="badge-icon" title={b.label} referrerPolicy="no-referrer" /> : null
                   ))}
                 </div>
               )}
               
               <div className="comment-content">
-                {c.supersticker ? (
+                {/* ★修正: ステッカーもURLチェックを追加 */}
+                {c.supersticker && c.supersticker.sticker.url ? (
                   <img src={c.supersticker.sticker.url} alt="sticker" className="sticker-img" referrerPolicy="no-referrer" />
                 ) : (
                   <span className="comment-text">
