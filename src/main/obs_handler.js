@@ -6,7 +6,7 @@ const obs = new OBSWebSocket()
 
 let windowsRef = null
 let currentConfig = null
-let reconnectTimer = null // ★変更: IntervalではなくTimeoutで管理
+let reconnectTimer = null
 
 // 現在の状態を保持する変数
 let currentStatus = {
@@ -32,12 +32,12 @@ export async function reconnectOBS(config) {
   }
   
   try {
-    // リスナーを削除して誤発火を防ぐ
+    // ★重要: リスナーを全削除して、イベントの重複発火を防ぐ
     obs.removeAllListeners('StreamStateChanged')
     obs.removeAllListeners('InputMuteStateChanged')
     obs.removeAllListeners('ConnectionClosed')
 
-    // 意図的な切断
+    // 意図的な切断（エラーは無視）
     try { await obs.disconnect() } catch (e) { /* ignore */ }
 
     console.log('🔄 Connecting to OBS...', config.url)
@@ -49,31 +49,36 @@ export async function reconnectOBS(config) {
 
     await syncStatus()
 
-    // イベントリスナー登録
+    // --- イベントリスナー設定 ---
+
     obs.on('StreamStateChanged', (data) => {
-      updateAndBroadcast({ isStreaming: data.outputActive })
+      // ストリーム状態が変わった = 接続は生きているので obsConnected: true も送る
+      updateAndBroadcast({ isStreaming: data.outputActive, obsConnected: true })
     })
 
     obs.on('InputMuteStateChanged', (data) => {
       if (data.inputName === currentConfig.micName) {
-        updateAndBroadcast({ micMuted: data.inputMuted })
+        // ミュートが変わった = 接続は生きているので obsConnected: true も送る
+        updateAndBroadcast({ micMuted: data.inputMuted, obsConnected: true })
       }
     })
 
     obs.on('ConnectionClosed', () => {
       console.log('❌ OBS Connection Closed')
       updateAndBroadcast({ isStreaming: false, obsConnected: false })
+      // 切断されたら自動再接続をスケジュール
       scheduleReconnect()
     })
 
   } catch (error) {
     console.error('⚠️ Failed to connect to OBS:', error.message)
     updateAndBroadcast({ obsConnected: false })
+    // 接続失敗時も再接続をスケジュール
     scheduleReconnect()
   }
 }
 
-// ★変更: シンプルな再接続スケジューラー
+// ★追加: 自動再接続スケジューラー
 function scheduleReconnect() {
   if (reconnectTimer) return
   console.log('⏳ OBS Reconnect scheduled in 5s...')
@@ -98,30 +103,33 @@ async function syncStatus() {
       obsConnected: true
     })
   } catch (e) {
-    // sync失敗しても接続自体は維持されているのでエラーにはしない
     console.warn('⚠️ OBS Status Sync failed (minor):', e.message)
   }
 }
 
-// ★重要修正: 常に接続状態(obsConnected)を含めて送信する
+// ★修正: 常に現在の obsConnected 状態を含めて送信する
 function updateAndBroadcast(newStatus) {
-  // キャッシュを更新
+  // 状態をマージ
   currentStatus = { ...currentStatus, ...newStatus }
 
-  // 部分的な更新(micMuted等)であっても、接続状態が正しければ
-  // AdminPanel側が復帰できるように、常に obsConnected を含める
+  // AdminPanelが正しく状態を把握できるよう、常に obsConnected を含めたオブジェクトを作る
+  // (newStatusに obsConnected が含まれていればそれが優先され、なければ currentStatus のものが使われる)
   const payload = { 
-    ...newStatus, 
-    obsConnected: currentStatus.obsConnected 
+    ...currentStatus, // 全ての現在の状態を含める
+    ...newStatus      // 新しい変更で上書き
   }
 
-  const { winStatus, winAdmin } = windowsRef || {}
+  const { winStatus, winAdmin, winOBS } = windowsRef || {}
   
   if (winStatus && !winStatus.isDestroyed()) {
     winStatus.webContents.send('update-status', payload)
   }
   if (winAdmin && !winAdmin.isDestroyed()) {
     winAdmin.webContents.send('update-status', payload)
+  }
+  // winOBSにも送っておく（念のため）
+  if (winOBS && !winOBS.isDestroyed()) {
+    winOBS.webContents.send('update-status', payload)
   }
 }
 
