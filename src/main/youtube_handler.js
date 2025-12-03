@@ -17,7 +17,7 @@ export function initYouTube(windows) {
 const safeUrl = (url) => {
   if (!url || typeof url !== 'string') return ''
   
-  // 1. 前後の空白を削除 (これが見えない原因の可能性があります)
+  // 1. 前後の空白を削除
   const trimmed = url.trim()
 
   // 2. プロトコル相対URL (//) の処理
@@ -61,10 +61,9 @@ export async function connectYouTube(channelIdOrUrl) {
       let color = `hsl(${Math.random() * 360}, 70%, 60%)` 
       
       const authorName = chatItem.author.name
-      // ★ここで強力版 safeUrl を適用
       const authorIcon = safeUrl(chatItem.author.thumbnail?.url)
 
-      // --- メンバー判定ロジック (成功しているので維持) ---
+      // --- メンバー判定 ---
       let isMember = Boolean(chatItem.author.isChatSponsor)
 
       if (!isMember && chatItem.author.badge) {
@@ -79,11 +78,17 @@ export async function connectYouTube(channelIdOrUrl) {
           return !isMod && !isVerified && !isOwner
         })
       }
-      
+
+      // ★修正: バッジURLの変換処理を先に実行
+      const rawBadges = chatItem.author.badge ? [].concat(chatItem.author.badge) : []
+      const authorBadges = rawBadges.map(b => ({
+        ...b,
+        // バッジ画像は b.thumbnail.url にある場合が多いので両方チェック
+        url: safeUrl(b.thumbnail ? b.thumbnail.url : b.url)
+      }))
+
       // ログ確認用
       console.log(`[Message] ${authorName} (Member: ${isMember})`)
-      // ここで Safe: https://... になっているか確認できます
-      console.log(`[Icon URL] Original: ${chatItem.author.thumbnail?.url} -> Safe: ${authorIcon}`)
 
       const superchat = chatItem.superchat
       const supersticker = chatItem.supersticker
@@ -92,21 +97,22 @@ export async function connectYouTube(channelIdOrUrl) {
         color = superchat.color
       }
 
-      spawnPhysicsComment(message, color, authorName, authorIcon)
-
-      const { winComment, winOBS } = windowsRef || {}
-      
-      // バッジURLも変換
-      const rawBadges = chatItem.author.badge ? [].concat(chatItem.author.badge) : []
-      const authorBadges = rawBadges.map(b => ({
-        ...b,
-        url: safeUrl(b.url)
-      }))
-
-      // ステッカーURLも変換
+      // ステッカーURL変換
       if (supersticker && supersticker.sticker) {
         supersticker.sticker.url = safeUrl(supersticker.sticker.url)
       }
+
+      try {
+        spawnPhysicsComment(message, color, authorName, authorIcon, {
+          messageParts: chatItem.message,
+          isMember: isMember,
+          authorBadges: authorBadges
+        })
+      } catch (err) {
+        console.error('Physics Spawn Error:', err)
+      }
+
+      const { winComment, winOBS } = windowsRef || {}
 
       const commentData = { 
         text: message, 

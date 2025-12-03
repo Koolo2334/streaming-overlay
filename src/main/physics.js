@@ -10,7 +10,7 @@ const LAYOUT = {
   gameY: 30,
   gameW: 1440,
   gameH: 846,
-  gap: 20
+  gap: 30
 }
 
 // 情報ウィンドウのエリア定義
@@ -18,13 +18,22 @@ const INFO_AREA = {
   x: LAYOUT.gameX,
   y: LAYOUT.gameY + LAYOUT.gameH + LAYOUT.gap,
   w: LAYOUT.gameW,
-  h: VIRTUAL_HEIGHT - (LAYOUT.gameY + LAYOUT.gameH + LAYOUT.gap) - 40
+  h: VIRTUAL_HEIGHT - (LAYOUT.gameY + LAYOUT.gameH + LAYOUT.gap) - 30
 }
 
 let engine
 let intervalId
+let windowsRef = null
+let isPhysicsActive = true
+
+// シーン変更時に呼び出す関数
+export function updatePhysicsState(sceneName) {
+  isPhysicsActive = (sceneName === 'main')
+  // ここでのデータ送信は broadcastPositions に任せるため削除
+}
 
 export function initPhysics(windows) {
+  windowsRef = windows
   engine = Matter.Engine.create()
   const world = engine.world
 
@@ -45,12 +54,12 @@ export function initPhysics(windows) {
       const comment = bodyA.label === 'comment' ? bodyA : bodyB.label === 'comment' ? bodyB : null
 
       if (sensor && comment) {
-        // 当たりデータを送信 (アイコンURLも含める)
+        // 当たりデータを送信
         const hitData = { 
           text: comment.text, 
           color: comment.color,
           authorName: comment.authorName,
-          authorIcon: comment.authorIcon // ★追加
+          authorIcon: comment.authorIcon
         }
 
         if (windows.winOBS && !windows.winOBS.isDestroyed()) {
@@ -65,6 +74,7 @@ export function initPhysics(windows) {
 
   const fps = 60
   intervalId = setInterval(() => {
+    // ★修正: ループ停止条件を削除し、常に演算を行う
     Matter.Engine.update(engine, 1000 / fps)
     removeOutOfBoundsBodies()
     broadcastPositions(windows)
@@ -141,6 +151,14 @@ function removeOutOfBoundsBodies() {
 
 function broadcastPositions(windows) {
   const { winUser, winOBS } = windows
+
+  // ★修正: Mainシーン以外の場合は空データを送信して非表示にする
+  if (!isPhysicsActive) {
+    if (winUser && !winUser.isDestroyed()) winUser.webContents.send('physics-update', [])
+    if (winOBS && !winOBS.isDestroyed()) winOBS.webContents.send('physics-update', [])
+    return
+  }
+
   const bodies = Matter.Composite.allBodies(engine.world)
 
   const syncData = bodies.map((body) => ({
@@ -161,9 +179,9 @@ function broadcastPositions(windows) {
   if (winOBS && !winOBS.isDestroyed()) winOBS.webContents.send('physics-update', syncData)
 }
 
-// ★修正: 引数に authorIcon を追加し、保存する
 export function spawnPhysicsComment(text, color, authorName = 'Anonymous', authorIcon = '') {
-  if (!engine) return
+  // ★修正: 物理演算停止条件を削除 (非表示中でも生成は許可)
+  if (!engine) return 
 
   const minX = INFO_AREA.x + 50
   const maxX = INFO_AREA.x + INFO_AREA.w - 50
@@ -181,14 +199,14 @@ export function spawnPhysicsComment(text, color, authorName = 'Anonymous', autho
     color: color || '#FFFFFF',
     text: text,
     authorName: authorName,
-    authorIcon: authorIcon // ★追加
+    authorIcon: authorIcon 
   })
   
   body.circleRadius = radius
   body.color = color || '#FFFFFF'
   body.text = text
   body.authorName = authorName
-  body.authorIcon = authorIcon // ★追加
+  body.authorIcon = authorIcon
 
   Matter.World.add(engine.world, body)
 }

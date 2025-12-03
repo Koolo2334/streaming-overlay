@@ -148,13 +148,13 @@ const OBS_View = () => {
           </div>
         </div>
 
-        {/* ... (他パーツ省略) ... */}
         <div className="tech-window info-window" style={{ left: infoX, top: infoY, width: infoW, height: infoH }}>
           <div className="window-header">
             <div className="window-title">🟣 SYSTEM_STATUS</div>
             <div className="window-controls"><span/><span/><span/></div>
           </div>
-          <div className="window-body flex-center" style={{ position: 'relative' }}>
+          {/* ★修正: 文字を上下中央に配置するために display: flex を追加 */}
+          <div className="window-body flex-center" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
             <div className="scrolling-text">
               🎵 Now Playing: Cyber Pop Synth // 📢 Don't forget to Subscribe! // 🚀 System Engineer Gaming
             </div>
@@ -186,12 +186,17 @@ const OBS_View = () => {
         <div className="lucky-overlay" style={{ left: infoX, width: infoW, bottom: 0 }}>
           <div className="lucky-box">
             <h1 className="lucky-title">✨ JACKPOT!! ✨</h1>
-            <div className="lucky-comment" style={{ color: luckyData.color }}>
-              <div style={{ fontSize: '20px', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {luckyData.authorIcon && <img src={luckyData.authorIcon} alt="" style={{ width: '30px', height: '30px', borderRadius: '50%', marginRight: '10px', border: '2px solid #ffd700' }} referrerPolicy="no-referrer" />}
-                <span>Winner: {luckyData.authorName}</span>
+            <div className="lucky-comment">
+              <div style={{ fontSize: '20px', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: luckyData.color }}>
+                {luckyData.authorIcon && <img src={luckyData.authorIcon} alt="" style={{ width: '30px', height: '30px', borderRadius: '50%', marginRight: '10px', border: `2px solid ${luckyData.color}` }} referrerPolicy="no-referrer" />}
+                <span style={{ fontWeight: 'bold', textShadow: '0 0 2px black' }}>Winner: {luckyData.authorName}</span>
               </div>
-              {luckyData.text}
+              
+              <div className="lucky-message-text">
+                {luckyData.messageParts ? luckyData.messageParts.map((part, index) => (
+                  part.url ? <img key={index} src={part.url} alt="" className="lucky-emoji" referrerPolicy="no-referrer" /> : <span key={index}>{part.text}</span>
+                )) : luckyData.text}
+              </div>
             </div>
           </div>
         </div>
@@ -202,7 +207,7 @@ const OBS_View = () => {
       </div>
 
       <style>{`
-        /* ... CSS は変更なし ... */
+        /* ... CSS ... */
         :root { --col-bg: #1e1e2e; --col-win-bg: #282a36; --col-border: #44475a; --col-cyan: #8be9fd; --col-pink: #ff79c6; --col-yellow: #f1fa8c; --col-purple: #bd93f9; --col-text: #f8f8f2; }
         .obs-container { position: relative; width: 1920px; height: 1080px; overflow: hidden; font-family: 'Consolas', monospace; color: var(--col-text); }
         .bg-part, .full-cover-bg { position: absolute; background-color: var(--col-bg); background-image: radial-gradient(var(--col-border) 15%, transparent 16%); background-size: 20px 20px; z-index: 5; }
@@ -229,7 +234,16 @@ const OBS_View = () => {
         .transparent-body { background: transparent; }
         .rec-indicator { position: absolute; top: 10px; right: 10px; color: #ff5555; font-weight: bold; animation: blink 1s infinite; text-shadow: 0 0 5px red; }
         @keyframes blink { 50% { opacity: 0; } }
-        .scrolling-text { white-space: nowrap; font-size: 20px; color: var(--col-pink); animation: scroll 15s linear infinite; }
+        
+        /* ★修正: フォントサイズを大きくし、太字・影を追加 */
+        .scrolling-text { 
+          white-space: nowrap; 
+          font-size: 38px; 
+          font-weight: bold;
+          color: var(--col-pink); 
+          animation: scroll 15s linear infinite; 
+          text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+        }
         @keyframes scroll { from { transform: translateX(100%); } to { transform: translateX(-100%); } }
         
         .avatar-area { position: absolute; display: flex; align-items: center; justify-content: center; }
@@ -266,7 +280,17 @@ const OBS_View = () => {
         .lucky-box { background: rgba(0, 0, 0, 0.9); border: 4px solid var(--col-yellow); padding: 40px; border-radius: 20px; text-align: center; box-shadow: 0 0 50px var(--col-yellow); animation: jumpOut 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards; transform-origin: center bottom; }
         @keyframes jumpOut { 0% { opacity: 0; transform: translateY(50px) scale(0.5); } 50% { opacity: 1; transform: translateY(-180px) scale(1.1); } 100% { opacity: 1; transform: translateY(-150px) scale(1); } }
         .lucky-title { font-size: 60px; margin: 0; color: var(--col-yellow); text-shadow: 0 0 10px orange; animation: pulse 0.5s infinite; }
-        .lucky-comment { font-size: 30px; margin-top: 20px; font-weight: bold; text-shadow: 0 0 5px white; }
+        
+        .lucky-comment { margin-top: 20px; }
+        .lucky-message-text {
+          font-size: 32px;
+          font-weight: 800; 
+          color: white; 
+          line-height: 1.4;
+          text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+        }
+        .lucky-emoji { height: 1.2em; vertical-align: middle; margin: 0 4px; }
+        
         @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
       `}</style>
     </div>

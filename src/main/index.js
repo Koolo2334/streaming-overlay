@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, screen, globalShortcut, session } from 'el
 import { join } from 'path'
 import { electronApp, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import { initPhysics, spawnPhysicsComment } from './physics'
+import { initPhysics, spawnPhysicsComment, updatePhysicsState } from './physics'
 import { initOBS, toggleStream, toggleMute, reconnectOBS, getObsStatus } from './obs_handler'
 import { initYouTube, connectYouTube, disconnectYouTube, getYouTubeStatus } from './youtube_handler'
 import Store from 'electron-store'
@@ -194,7 +194,7 @@ function createWindows() {
   // --- Start ---
   initPhysics({ winAdmin, winUser, winOBS, winLucky })
   const obsConfig = store.get('obsConfig')
-  initOBS({ winAdmin, winStatus }, obsConfig)
+  initOBS({ winAdmin, winStatus, winOBS }, obsConfig)
   initYouTube({ winAdmin, winComment, winOBS, winLucky })
   
   registerShortcuts()
@@ -351,6 +351,20 @@ function setupIpcHandlers() {
   ipcMain.on('update-status', async (event, status) => {
     if (status.isStreaming !== undefined) await toggleStream(status.isStreaming)
     if (status.micMuted !== undefined) await toggleMute(status.micMuted)
+  })
+
+  ipcMain.removeAllListeners('change-scene')
+  ipcMain.on('change-scene', (event, sceneName) => {
+    // 1. 各ウィンドウへ通知
+    const targetWindows = [winAdmin, winUser, winOBS, winStatus]
+    targetWindows.forEach(win => {
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('change-scene', sceneName)
+      }
+    })
+
+    // 2. 物理エンジンの状態更新 (Main以外なら停止＆非表示)
+    updatePhysicsState(sceneName)
   })
 }
 
