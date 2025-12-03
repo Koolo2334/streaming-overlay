@@ -38,16 +38,23 @@ const StatusWindow = () => {
   // リサイズ監視
   useEffect(() => {
     if (!containerRef.current) return
-    const observer = new ResizeObserver(() => {
-      // ★修正
-      const { width, height } = containerRef.current.getBoundingClientRect()
-      if (width > 0 && height > 0) {
-        window.api.resizeWindow(Math.ceil(width), Math.ceil(height))
+
+    const observer = new ResizeObserver((entries) => {
+      // ★修正ポイント1: インタラクティブモードでないなら、サイズ同期リクエストを送らない
+      if (!isInteractive) return 
+
+      // (StatusWindowなど一部のファイルでは entries ループを使わず直接 getBoundingClientRect している場合がありますが、中身のロジックの前にこのif文を入れてください)
+      for (const entry of entries) {
+        const { width, height } = containerRef.current.getBoundingClientRect()
+        if (width > 0 && height > 0) {
+          window.api.resizeWindow(Math.ceil(width), Math.ceil(height))
+        }
       }
     })
+
     observer.observe(containerRef.current)
     return () => observer.disconnect()
-  }, [])
+  }, [isInteractive])
 
   return (
     <div 

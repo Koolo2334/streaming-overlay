@@ -35,7 +35,12 @@ const LuckyLogWindow = () => {
 
   useEffect(() => {
     if (!containerRef.current) return
+
     const observer = new ResizeObserver((entries) => {
+      // ★修正ポイント1: インタラクティブモードでないなら、サイズ同期リクエストを送らない
+      if (!isInteractive) return 
+
+      // (StatusWindowなど一部のファイルでは entries ループを使わず直接 getBoundingClientRect している場合がありますが、中身のロジックの前にこのif文を入れてください)
       for (const entry of entries) {
         const { width, height } = containerRef.current.getBoundingClientRect()
         if (width > 0 && height > 0) {
@@ -43,9 +48,10 @@ const LuckyLogWindow = () => {
         }
       }
     })
+
     observer.observe(containerRef.current)
     return () => observer.disconnect()
-  }, [])
+  }, [isInteractive])
 
   return (
     <div 
@@ -79,7 +85,7 @@ const LuckyLogWindow = () => {
           // 名前のスタイル：メンバーなら緑、それ以外は金色（LuckyLog仕様）
           const nameStyle = {
             fontWeight: 'bold',
-            color: c.isMember ? '#2ba640' : '#ffd700',
+            color: c.isMember ? '#2ba640' : '#ffffff',
             textShadow: '0 1px 1px rgba(0,0,0,0.5)',
             fontSize: '14px',
             overflow: 'hidden',

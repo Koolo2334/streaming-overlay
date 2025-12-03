@@ -59,7 +59,10 @@ export function initPhysics(windows) {
           text: comment.text, 
           color: comment.color,
           authorName: comment.authorName,
-          authorIcon: comment.authorIcon
+          authorIcon: comment.authorIcon,
+          messageParts: comment.messageParts,
+          isMember: comment.isMember,
+          authorBadges: comment.authorBadges
         }
 
         if (windows.winOBS && !windows.winOBS.isDestroyed()) {
@@ -179,7 +182,7 @@ function broadcastPositions(windows) {
   if (winOBS && !winOBS.isDestroyed()) winOBS.webContents.send('physics-update', syncData)
 }
 
-export function spawnPhysicsComment(text, color, authorName = 'Anonymous', authorIcon = '') {
+export function spawnPhysicsComment(text, color, authorName = 'Anonymous', authorIcon = '', extraData = {}) {
   // ★修正: 物理演算停止条件を削除 (非表示中でも生成は許可)
   if (!engine) return 
 
@@ -199,7 +202,10 @@ export function spawnPhysicsComment(text, color, authorName = 'Anonymous', autho
     color: color || '#FFFFFF',
     text: text,
     authorName: authorName,
-    authorIcon: authorIcon 
+    authorIcon: authorIcon,
+    messageParts: extraData.messageParts || [],
+    isMember: extraData.isMember || false,
+    authorBadges: extraData.authorBadges || []
   })
   
   body.circleRadius = radius
@@ -207,6 +213,9 @@ export function spawnPhysicsComment(text, color, authorName = 'Anonymous', autho
   body.text = text
   body.authorName = authorName
   body.authorIcon = authorIcon
+  body.messageParts = extraData.messageParts || []
+  body.isMember = extraData.isMember || false
+  body.authorBadges = extraData.authorBadges || []
 
   Matter.World.add(engine.world, body)
 }

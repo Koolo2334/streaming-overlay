@@ -330,6 +330,7 @@ function setupIpcHandlers() {
     spawnPhysicsComment(text, color)
   })
 
+  // ★重要修正: リサイズイベント時に強制的に保存する処理を追加
   ipcMain.removeAllListeners('resize-window')
   ipcMain.on('resize-window', (event, { width, height }) => {
     const win = BrowserWindow.fromWebContents(event.sender)
@@ -337,6 +338,20 @@ function setupIpcHandlers() {
       const [currentW, currentH] = win.getContentSize()
       if (currentW !== width || currentH !== height) {
         win.setContentSize(Math.ceil(width), Math.ceil(height))
+        
+        // --- ここから追加 ---
+        // イベントが発火しない場合に備えて、ここで直接保存する
+        let name = null
+        if (win === winAdmin) name = 'admin'
+        if (win === winComment) name = 'comment'
+        if (win === winStatus) name = 'status'
+        if (win === winLucky) name = 'lucky'
+
+        if (name) {
+          // getBoundsはウィンドウ全体の位置とサイズを返します
+          store.set(`windowBounds.${name}`, win.getBounds())
+        }
+        // --- ここまで ---
       }
     }
   })
