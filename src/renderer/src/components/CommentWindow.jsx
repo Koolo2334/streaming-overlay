@@ -59,6 +59,13 @@ const CommentWindow = () => {
           const isSC = !!c.superchat;
           const bgStyle = isSC ? { backgroundColor: c.superchat.color } : {};
           
+          // ★修正: メンバーなら強制的に緑色 (#2ba640) にするスタイルオブジェクトを作成
+          const nameStyle = {
+            fontWeight: 'bold',
+            color: c.isMember ? '#2ba640' : '#eee', // メンバーなら緑、それ以外は白系
+            textShadow: '0 1px 1px rgba(0,0,0,0.5)'
+          };
+
           return (
             <div key={i} className={`comment-item ${isSC ? 'superchat' : ''}`} style={{ borderLeft: isSC ? 'none' : `5px solid ${c.color}`, ...bgStyle }}>
               
@@ -66,8 +73,8 @@ const CommentWindow = () => {
                 <div className="sc-header">
                   <div className="comment-header">
                     {c.authorIcon && <img src={c.authorIcon} alt="" className="author-icon" />}
-                    {/* スパチャの場合もメンバーなら緑にする */}
-                    <div className={`comment-author ${c.isMember ? 'member' : ''}`}>{c.authorName || 'Anonymous'}</div>
+                    {/* スタイルを適用 */}
+                    <div className="comment-author" style={nameStyle}>{c.authorName || 'Anonymous'}</div>
                   </div>
                   <div className="sc-amount">{c.superchat.amount}</div>
                 </div>
@@ -76,7 +83,8 @@ const CommentWindow = () => {
               {!isSC && (
                 <div className="comment-header">
                   {c.authorIcon && <img src={c.authorIcon} alt="" className="author-icon" />}
-                  <div className={`comment-author ${c.isMember ? 'member' : ''}`}>{c.authorName || 'Anonymous'}</div>
+                  {/* スタイルを適用 */}
+                  <div className="comment-author" style={nameStyle}>{c.authorName || 'Anonymous'}</div>
                 </div>
               )}
               
@@ -116,50 +124,24 @@ const CommentWindow = () => {
           word-break: break-word; 
         }
 
-        .comment-item.superchat {
-          padding: 0;
-          overflow: hidden;
-          color: #000;
-          text-shadow: none;
-        }
-        .sc-header {
-          padding: 8px 12px;
-          background: rgba(0,0,0,0.1);
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
+        .comment-item.superchat { padding: 0; overflow: hidden; color: #000; text-shadow: none; }
+        .sc-header { padding: 8px 12px; background: rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; }
         .sc-amount { font-weight: 900; font-size: 16px; }
-        .comment-item.superchat .comment-content {
-          padding: 8px 12px;
-          background: rgba(255,255,255,0.7);
-          color: black;
-        }
+        .comment-item.superchat .comment-content { padding: 8px 12px; background: rgba(255,255,255,0.7); color: black; }
         
         .comment-header { display: flex; align-items: center; margin-bottom: 4px; }
         .author-icon { width: 24px; height: 24px; border-radius: 50%; margin-right: 8px; }
         
         .comment-author {
           font-size: 14px;
-          color: #eee;
-          font-weight: bold;
+          /* colorはインラインスタイルで制御するため削除 */
           overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-          text-shadow: 0 1px 1px rgba(0,0,0,0.5);
-        }
-        /* ★緑色を強制適用 */
-        .comment-author.member {
-          color: #2ba640 !important;
         }
 
-        .comment-text {
-          font-size: 18px; font-weight: 600; line-height: 1.4;
-          text-shadow: 0 1px 2px rgba(0,0,0,0.8);
-        }
+        .comment-text { font-size: 18px; font-weight: 600; line-height: 1.4; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
         .comment-item.superchat .comment-text { text-shadow: none; }
-
         .emoji-img { height: 1.4em; vertical-align: middle; margin: 0 2px; }
         .sticker-img { max-width: 100px; max-height: 100px; display: block; margin: 5px 0; }
-
         @keyframes slideIn { from { transform: translateX(-10px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
       `}</style>
     </div>

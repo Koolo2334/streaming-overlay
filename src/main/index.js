@@ -28,7 +28,8 @@ const store = new Store({
       password: '',
       micName: 'マイク'
     },
-    youtubeConfig: { channelId: '' }
+    youtubeConfig: { channelId: '' },
+    commentLifeTime: 15000
   }
 })
 
@@ -38,7 +39,7 @@ let winOBS = null
 let winKeybind = null
 let winComment = null
 let winStatus = null
-let winLucky = null // ★追加
+let winLucky = null // ★追加: LuckyLog用ウィンドウ
 let isAdminInteractive = false
 
 function createWindows() {
@@ -63,13 +64,12 @@ function createWindows() {
     }
   }
 
-  // Helper
   const getBounds = (name, defaultBounds) => store.get(`windowBounds.${name}`, defaultBounds)
   const saveBounds = (name, win) => {
     if (win && !win.isDestroyed()) store.set(`windowBounds.${name}`, win.getBounds())
   }
 
-  // --- 1. Admin ---
+  // --- 1. Admin Window ---
   const adminBounds = getBounds('admin', { x: 50, y: 50, width: 400, height: 600 })
   winAdmin = new BrowserWindow({ ...commonConfig, ...adminBounds, alwaysOnTop: true, resizable: true })
   winAdmin.on('resized', () => saveBounds('admin', winAdmin))
@@ -81,17 +81,23 @@ function createWindows() {
     winAdmin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
     winAdmin.setAlwaysOnTop(true, 'screen-saver')
   })
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) winAdmin.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/index.html#/admin`)
-  else winAdmin.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'admin' })
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    winAdmin.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/index.html#/admin`)
+  } else {
+    winAdmin.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'admin' })
+  }
 
-  // --- 2. User ---
+  // --- 2. User Window ---
   winUser = new BrowserWindow({ ...commonConfig, width, height, x: 0, y: 0, alwaysOnTop: true })
   winUser.setIgnoreMouseEvents(true, { forward: true })
   winUser.on('ready-to-show', () => winUser.showInactive())
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) winUser.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/index.html#/user`)
-  else winUser.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'user' })
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    winUser.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/index.html#/user`)
+  } else {
+    winUser.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'user' })
+  }
 
-  // --- 3. OBS ---
+  // --- 3. OBS Window ---
   winOBS = new BrowserWindow({ ...commonConfig, width: 1920, height: 1080, useContentSize: true, x: 0, y: 0, resizable: true, alwaysOnTop: false, focusable: false })
   winOBS.on('ready-to-show', () => {
     winOBS.showInactive()
@@ -103,18 +109,26 @@ function createWindows() {
     winOBS.blur() 
     winOBS.setAlwaysOnTop(false)
   })
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) winOBS.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/index.html#/obs`)
-  else winOBS.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'obs' })
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    winOBS.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/index.html#/obs`)
+  } else {
+    winOBS.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'obs' })
+  }
 
-  // --- 4. Keybind ---
+  // --- 4. Keybind Manager Window ---
   winKeybind = new BrowserWindow({ ...commonConfig, width: 500, height: 400, x: 200, y: 200, alwaysOnTop: true })
   winKeybind.setIgnoreMouseEvents(false)
-  winKeybind.on('ready-to-show', () => winKeybind.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true }))
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) winKeybind.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/index.html#/keybind`)
-  else winKeybind.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'keybind' })
+  winKeybind.on('ready-to-show', () => {
+    winKeybind.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  })
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    winKeybind.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/index.html#/keybind`)
+  } else {
+    winKeybind.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'keybind' })
+  }
   winKeybind.hide()
 
-  // --- 5. Comment ---
+  // --- 5. Comment Window ---
   const commentBounds = getBounds('comment', { x: 100, y: 800, width: 300, height: 400 })
   winComment = new BrowserWindow({ ...commonConfig, ...commentBounds, alwaysOnTop: true, resizable: true })
   winComment.on('resized', () => saveBounds('comment', winComment))
@@ -126,10 +140,13 @@ function createWindows() {
     winComment.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
     winComment.setAlwaysOnTop(true, 'normal')
   })
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) winComment.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/index.html#/comment`)
-  else winComment.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'comment' })
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    winComment.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/index.html#/comment`)
+  } else {
+    winComment.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'comment' })
+  }
 
-  // --- 6. Status ---
+  // --- 6. Status Window ---
   const statusBounds = getBounds('status', { x: width - 300, y: 100, width: 200, height: 100 })
   winStatus = new BrowserWindow({ ...commonConfig, ...statusBounds, alwaysOnTop: true, resizable: true })
   winStatus.on('resized', () => saveBounds('status', winStatus))
@@ -141,10 +158,13 @@ function createWindows() {
     winStatus.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
     winStatus.setAlwaysOnTop(true, 'normal')
   })
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) winStatus.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/index.html#/status`)
-  else winStatus.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'status' })
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    winStatus.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/index.html#/status`)
+  } else {
+    winStatus.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'status' })
+  }
 
-  // --- 7. Lucky Log (New!) ---
+  // --- 7. Lucky Log Window (★復活) ---
   const luckyBounds = getBounds('lucky', { x: 100, y: 100, width: 300, height: 200 })
   winLucky = new BrowserWindow({ ...commonConfig, ...luckyBounds, alwaysOnTop: true, resizable: true })
   winLucky.on('resized', () => saveBounds('lucky', winLucky))
@@ -156,19 +176,21 @@ function createWindows() {
     winLucky.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
     winLucky.setAlwaysOnTop(true, 'normal')
   })
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) winLucky.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/index.html#/lucky`)
-  else winLucky.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'lucky' })
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    winLucky.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/index.html#/lucky`)
+  } else {
+    winLucky.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'lucky' })
+  }
 
-
-  // --- Start ---
-  // ★重要: initPhysics に winLucky を渡す
+  // --- 機能起動 ---
+  // ★重要: 全てのウィンドウ参照を渡す
   initPhysics({ winAdmin, winUser, winOBS, winLucky })
   
   const obsConfig = store.get('obsConfig')
   initOBS({ winAdmin, winStatus }, obsConfig)
 
-  // ★修正: winOBS を追加で渡す
-  initYouTube({ winAdmin, winComment, winOBS })
+  // ★重要: winOBSとwinLuckyも含めて渡す
+  initYouTube({ winAdmin, winComment, winOBS, winLucky })
   
   registerShortcuts()
 }
@@ -187,7 +209,6 @@ function registerShortcuts() {
   if (keybinds.toggleAdminInput) {
     globalShortcut.register(keybinds.toggleAdminInput, () => {
       isAdminInteractive = !isAdminInteractive
-      // ★追加: winLucky も操作対象に
       const targetWindows = [winAdmin, winComment, winStatus, winLucky]
       targetWindows.forEach(win => {
         if (win && !win.isDestroyed()) {
@@ -220,7 +241,6 @@ function registerShortcuts() {
     globalShortcut.register(keybinds.gatherWindows, () => {
       if (!isAdminInteractive) return
       const { x, y } = screen.getCursorScreenPoint()
-      // ★追加: winLucky
       const targets = [
         { win: winAdmin, width: 400, height: 600 },
         { win: winComment, width: 300, height: 400 },
@@ -239,9 +259,9 @@ function registerShortcuts() {
 }
 
 function setupIpcHandlers() {
-  // ... (ここは既存のままでOK) ...
   ipcMain.removeHandler('get-keybinds')
   ipcMain.handle('get-keybinds', () => store.get('keybinds'))
+  
   ipcMain.removeHandler('set-keybind')
   ipcMain.handle('set-keybind', (event, { action, shortcut }) => {
     try {
@@ -251,6 +271,8 @@ function setupIpcHandlers() {
       return true
     } catch (e) { console.error(e); return false }
   })
+
+  // OBS
   ipcMain.removeHandler('get-obs-config')
   ipcMain.handle('get-obs-config', () => store.get('obsConfig'))
   ipcMain.removeHandler('set-obs-config')
@@ -263,6 +285,8 @@ function setupIpcHandlers() {
   })
   ipcMain.removeHandler('get-obs-status')
   ipcMain.handle('get-obs-status', () => getObsStatus())
+
+  // YouTube
   ipcMain.removeHandler('get-youtube-config')
   ipcMain.handle('get-youtube-config', () => store.get('youtubeConfig'))
   ipcMain.removeHandler('set-youtube-config')
@@ -283,6 +307,7 @@ function setupIpcHandlers() {
   })
   ipcMain.removeHandler('get-youtube-status')
   ipcMain.handle('get-youtube-status', () => getYouTubeStatus())
+
   ipcMain.removeHandler('get-comment-life-time')
   ipcMain.handle('get-comment-life-time', () => store.get('commentLifeTime'))
   ipcMain.removeHandler('set-comment-life-time')
@@ -296,6 +321,7 @@ function setupIpcHandlers() {
     if (winComment && !winComment.isDestroyed()) {
       winComment.webContents.send('new-comment', { text, color })
     }
+    // spawnPhysicsComment は physics.js でインポート済み
     spawnPhysicsComment(text, color)
   })
 

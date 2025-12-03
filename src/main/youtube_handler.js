@@ -41,28 +41,20 @@ export async function connectYouTube(channelIdOrUrl) {
       const authorName = chatItem.author.name
       const authorIcon = chatItem.author.thumbnail?.url || ''
 
-      // --- ★メンバー判定ロジックの強化 ---
-      let isMember = false
-      const badges = chatItem.author.badge
+      // --- ★メンバー判定ロジック (ここを修正) ---
+      // 1. isChatSponsor (メンバー) フラグを直接チェック
+      let isMember = Boolean(chatItem.author.isChatSponsor)
 
-      if (Array.isArray(badges)) {
-        isMember = badges.some(b => {
+      // 2. フラグがない場合、バッジ情報から推測 (バックアップ)
+      if (!isMember && Array.isArray(chatItem.author.badge)) {
+        isMember = chatItem.author.badge.some(b => {
           const label = (b.label || '').toLowerCase()
-          // 1. 明確に「メンバー」を含む場合
-          if (label.includes('member') || label.includes('メンバー')) return true
-          
-          // 2. 「モデレーター(Moderator)」でも「認証済み(Verified)」でもないバッジを持っている場合
-          // (カスタムバッジなどでMemberという文字が入っていないケースへの対策)
-          if (!label.includes('moderator') && !label.includes('モデレーター') && 
-              !label.includes('verified') && !label.includes('確認済み') &&
-              !label.includes('owner') && !label.includes('オーナー')) {
-            return true
-          }
-          return false
+          // "Member"や"メンバー"を含むかチェック
+          return label.includes('member') || label.includes('メンバー')
         })
       }
       
-      // デバッグ用: メンバー判定されたユーザーをログに出力
+      // デバッグログ
       if (isMember) {
         console.log(`[Member Detected] ${authorName}`)
       }
@@ -76,7 +68,7 @@ export async function connectYouTube(channelIdOrUrl) {
 
       spawnPhysicsComment(message, color, authorName, authorIcon)
 
-      const { winComment, winOBS } = windowsRef || {}
+      const { winComment, winOBS, winLucky } = windowsRef || {}
       
       const commentData = { 
         text: message, 
@@ -84,7 +76,7 @@ export async function connectYouTube(channelIdOrUrl) {
         color,
         authorName,
         authorIcon,
-        isMember,
+        isMember, // これがtrueになれば緑色になります
         superchat,
         supersticker
       }

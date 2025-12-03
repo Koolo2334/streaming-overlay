@@ -82,7 +82,6 @@ const OBS_View = () => {
           </div>
         </div>
 
-        {/* Comment Window */}
         <div className="tech-window comment-window" style={{ left: commentX, top: commentY, width: commentW, height: commentH }}>
           <div className="window-header">
             <div className="window-title">🟡 CHAT_STREAM.log</div>
@@ -94,6 +93,13 @@ const OBS_View = () => {
                 const isSC = !!c.superchat;
                 const bgStyle = isSC ? { backgroundColor: c.superchat.color } : {};
                 
+                // ★修正: メンバーなら強制的に緑色
+                const nameStyle = {
+                  fontWeight: 'bold',
+                  color: c.isMember ? '#2ba640' : '#eee',
+                  textShadow: '0 1px 1px rgba(0,0,0,0.5)'
+                };
+
                 return (
                   <li key={i} className={`comment-row ${isSC ? 'superchat' : ''}`} style={{ borderLeft: isSC ? 'none' : `3px solid ${c.color}`, ...bgStyle }}>
                     
@@ -101,7 +107,7 @@ const OBS_View = () => {
                       <div className="sc-header-row">
                         <div className="comment-header">
                           {c.authorIcon && <img src={c.authorIcon} alt="" className="author-icon" />}
-                          <div className={`comment-author ${c.isMember ? 'member' : ''}`}>{c.authorName || 'Anonymous'}</div>
+                          <div className="comment-author" style={nameStyle}>{c.authorName || 'Anonymous'}</div>
                         </div>
                         <div className="sc-amount">{c.superchat.amount}</div>
                       </div>
@@ -110,7 +116,7 @@ const OBS_View = () => {
                     {!isSC && (
                       <div className="comment-header">
                         {c.authorIcon && <img src={c.authorIcon} alt="" className="author-icon" />}
-                        <div className={`comment-author ${c.isMember ? 'member' : ''}`}>{c.authorName || 'Anonymous'}</div>
+                        <div className="comment-author" style={nameStyle}>{c.authorName || 'Anonymous'}</div>
                       </div>
                     )}
 
@@ -133,7 +139,7 @@ const OBS_View = () => {
           </div>
         </div>
 
-        {/* ... (他パーツ省略なしで完全版) ... */}
+        {/* ...他パーツ省略なし... */}
         <div className="tech-window info-window" style={{ left: infoX, top: infoY, width: infoW, height: infoH }}>
           <div className="window-header">
             <div className="window-title">🟣 SYSTEM_STATUS</div>
@@ -159,6 +165,7 @@ const OBS_View = () => {
 
       </div>
 
+      {/* ...Scenes... */}
       <div className={`scene-content op-scene ${currentScene === 'op' ? 'active' : ''}`}>
         <div className="pop-box"><h1>STARTING!</h1><div className="loader">Loading...</div></div>
       </div>
@@ -186,7 +193,7 @@ const OBS_View = () => {
       </div>
 
       <style>{`
-        /* ... CSS ... */
+        /* ...CSS... */
         :root { --col-bg: #1e1e2e; --col-win-bg: #282a36; --col-border: #44475a; --col-cyan: #8be9fd; --col-pink: #ff79c6; --col-yellow: #f1fa8c; --col-purple: #bd93f9; --col-text: #f8f8f2; }
         .obs-container { position: relative; width: 1920px; height: 1080px; overflow: hidden; font-family: 'Consolas', monospace; color: var(--col-text); }
         .bg-part, .full-cover-bg { position: absolute; background-color: var(--col-bg); background-image: radial-gradient(var(--col-border) 15%, transparent 16%); background-size: 20px 20px; z-index: 5; }
@@ -233,8 +240,7 @@ const OBS_View = () => {
 
         .comment-header { display: flex; align-items: center; margin-bottom: 4px; }
         .author-icon { width: 20px; height: 20px; border-radius: 50%; margin-right: 6px; }
-        .comment-author { font-size: 14px; color: #eee; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 1px 1px rgba(0,0,0,0.5); }
-        .comment-author.member { color: #2ba640 !important; }
+        .comment-author { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* color削除 */
         .comment-content { padding-left: 26px; }
         .comment-row.superchat .comment-content { padding-left: 10px; }
 
