@@ -8,7 +8,17 @@ const OBS_View = () => {
   const [comments, setComments] = useState([])
   const commentBottomRef = useRef(null)
 
-  const { x, y, width, height } = OBS_GAME_LAYOUT
+  // ★修正: OBS_GAME_LAYOUTの構造変更に対応
+  // width, heightは「中身」のサイズ。frameに枠の情報が入っている前提。
+  const { x, y, width: contentW, height: contentH, frame } = OBS_GAME_LAYOUT
+  
+  // ★追加: 枠を含めた外側のサイズを計算
+  const borderWidth = frame ? frame.borderWidth : 2
+  const headerHeight = frame ? frame.headerHeight : 32
+  
+  const width = contentW + (borderWidth * 2)
+  const height = contentH + headerHeight + (borderWidth * 2)
+
   const FULL_WIDTH = 1920
   const FULL_HEIGHT = 1080
 
@@ -72,6 +82,7 @@ const OBS_View = () => {
 
       <div className={`scene-content main-scene ${currentScene === 'main' ? 'active' : ''}`}>
         
+        {/* ゲームウィンドウのサイズは計算済みの width/height (枠込み) を使用 */}
         <div className="tech-window game-window" style={{ left: x, top: y, width, height }}>
           <div className="window-header">
             <div className="window-title">🔵 GAME_CAPTURE.exe</div>
@@ -153,7 +164,7 @@ const OBS_View = () => {
             <div className="window-title">🟣 SYSTEM_STATUS</div>
             <div className="window-controls"><span/><span/><span/></div>
           </div>
-          {/* ★修正: 文字を上下中央に配置するために display: flex を追加 */}
+          {/* 文字を上下中央に配置 */}
           <div className="window-body flex-center" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
             <div className="scrolling-text">
               🎵 Now Playing: Cyber Pop Synth // 📢 Don't forget to Subscribe! // 🚀 System Engineer Gaming
@@ -235,7 +246,6 @@ const OBS_View = () => {
         .rec-indicator { position: absolute; top: 10px; right: 10px; color: #ff5555; font-weight: bold; animation: blink 1s infinite; text-shadow: 0 0 5px red; }
         @keyframes blink { 50% { opacity: 0; } }
         
-        /* ★修正: フォントサイズを大きくし、太字・影を追加 */
         .scrolling-text { 
           white-space: nowrap; 
           font-size: 38px; 

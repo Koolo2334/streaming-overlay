@@ -67,16 +67,18 @@ const AdminPanel = () => {
   }, [showSettings])
 
   useEffect(() => {
-    if (!containerRef.current) return
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const { width, height } = entry.contentRect
-        window.api.resizeWindow(Math.ceil(width), Math.ceil(height))
-      }
-    })
-    observer.observe(containerRef.current)
-    return () => observer.disconnect()
-  }, [])
+      if (!containerRef.current) return
+      const observer = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const { width, height } = containerRef.current.getBoundingClientRect()
+          if (width > 0 && height > 0) {
+            window.api.resizeWindow(Math.ceil(width), Math.ceil(height))
+          }
+        }
+      })
+      observer.observe(containerRef.current)
+      return () => observer.disconnect()
+    }, [])
 
   // --- Handlers ---
 
@@ -124,7 +126,8 @@ const AdminPanel = () => {
       window.api.setYoutubeConfig(youtubeConfig)
     ]).then(() => {
       setShowSettings(false)
-      setStreamStatus(prev => ({ ...prev, obsConnected: false }))
+      // ★以下の行を削除またはコメントアウトしてください
+      // setStreamStatus(prev => ({ ...prev, obsConnected: false })) 
     })
   }
 
