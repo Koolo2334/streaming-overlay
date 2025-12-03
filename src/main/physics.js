@@ -4,6 +4,25 @@ import Matter from 'matter-js'
 const VIRTUAL_WIDTH = 1920
 const VIRTUAL_HEIGHT = 1080
 
+// レイアウト定数 (constants.js の変更に合わせて更新)
+const LAYOUT = {
+  gameX: 30,
+  gameY: 30,
+  gameW: 1440,
+  gameH: 846, // 810 -> 846 に変更
+  gap: 30
+}
+
+// 情報ウィンドウのエリア
+// Y = 30 + 846 + 30 = 896
+// H = 1080 - 896 - 30 = 144 (以前より狭くなる)
+const INFO_AREA = {
+  x: LAYOUT.gameX,
+  y: LAYOUT.gameY + LAYOUT.gameH + LAYOUT.gap,
+  w: LAYOUT.gameW,
+  h: VIRTUAL_HEIGHT - (LAYOUT.gameY + LAYOUT.gameH + LAYOUT.gap) - 30
+}
+
 let engine
 let intervalId
 
@@ -12,43 +31,111 @@ export function initPhysics(windows) {
   const world = engine.world
 
   const wallOptions = { isStatic: true, render: { visible: false } }
-  const ground = Matter.Bodies.rectangle(VIRTUAL_WIDTH / 2, VIRTUAL_HEIGHT + 50, VIRTUAL_WIDTH, 100, wallOptions)
-  const leftWall = Matter.Bodies.rectangle(-50, VIRTUAL_HEIGHT / 2, 100, VIRTUAL_HEIGHT, wallOptions)
-  const rightWall = Matter.Bodies.rectangle(VIRTUAL_WIDTH + 50, VIRTUAL_HEIGHT / 2, 100, VIRTUAL_HEIGHT, wallOptions)
+  
+  // 左右の壁
+  const leftWall = Matter.Bodies.rectangle(INFO_AREA.x - 20, VIRTUAL_HEIGHT / 2, 40, VIRTUAL_HEIGHT * 2, wallOptions)
+  const rightWall = Matter.Bodies.rectangle(INFO_AREA.x + INFO_AREA.w + 20, VIRTUAL_HEIGHT / 2, 40, VIRTUAL_HEIGHT * 2, wallOptions)
 
-  Matter.World.add(world, [ground, leftWall, rightWall])
+  Matter.World.add(world, [leftWall, rightWall])
+
+  setupPinballGimmicks(world)
+
+  Matter.Events.on(engine, 'collisionStart', (event) => {
+    const pairs = event.pairs
+    pairs.forEach((pair) => {
+      const { bodyA, bodyB } = pair
+      const sensor = bodyA.label === 'lucky-sensor' ? bodyA : bodyB.label === 'lucky-sensor' ? bodyB : null
+      const comment = bodyA.label === 'comment' ? bodyA : bodyB.label === 'comment' ? bodyB : null
+
+      if (sensor && comment) {
+        const hitData = { text: comment.text, color: comment.color }
+        
+        // 1. OBSの演出用
+        if (windows.winOBS && !windows.winOBS.isDestroyed()) {
+          windows.winOBS.webContents.send('lucky-hit', hitData)
+        }
+        
+        // 2. ★追加: ログウィンドウ用
+        if (windows.winLucky && !windows.winLucky.isDestroyed()) {
+          windows.winLucky.webContents.send('lucky-hit', hitData)
+        }
+      }
+    })
+  })
 
   const fps = 60
   intervalId = setInterval(() => {
     Matter.Engine.update(engine, 1000 / fps)
-    
-    // ★追加: 寿命チェック
-    removeOldBodies()
-    
+    removeOutOfBoundsBodies()
     broadcastPositions(windows)
   }, 1000 / fps)
 
   setupIpcListeners()
-
   console.log('Physics Engine Started')
 }
 
-// ★追加: 寿命が切れたボディを削除する関数
-function removeOldBodies() {
-  const bodies = Matter.Composite.allBodies(engine.world)
-  const now = Date.now()
+function setupPinballGimmicks(world) {
+  const obstacles = []
+  
+  const pegRadius = 5
+  const pegOptions = { isStatic: true, label: 'peg', restitution: 1.4 }
+  
+  const startX = INFO_AREA.x + 60
+  const endX = INFO_AREA.x + INFO_AREA.w - 40
+  const spacing = 60 
 
+  // 1. 上段の杭
+  // 情報ウィンドウが狭くなったので、枠ギリギリではなく少し内側に配置
+  const topY = INFO_AREA.y + 30
+  for (let x = startX; x <= endX; x += spacing) {
+    const peg = Matter.Bodies.circle(x, topY, pegRadius, pegOptions)
+    peg.color = '#8be9fd'
+    peg.radius = pegRadius
+    peg.renderType = 'peg'
+    obstacles.push(peg)
+  }
+
+  // 2. 下段の杭
+  // WinZoneへの門番
+  const bottomY = INFO_AREA.y + INFO_AREA.h - 20
+  for (let x = startX + (spacing/2); x <= endX - (spacing/2); x += spacing) {
+    const centerX = INFO_AREA.x + (INFO_AREA.w / 2)
+    if (Math.abs(x - centerX) < 100) continue; 
+
+    const peg = Matter.Bodies.circle(x, bottomY, pegRadius, pegOptions)
+    peg.color = '#8be9fd'
+    peg.radius = pegRadius
+    peg.renderType = 'peg'
+    obstacles.push(peg)
+  }
+
+  // 3. ラッキーセンサー
+  const sensorWidth = 200
+  const sensorHeight = 20
+  const sensorX = INFO_AREA.x + (INFO_AREA.w / 2)
+  const sensorY = VIRTUAL_HEIGHT - 10 
+
+  const sensor = Matter.Bodies.rectangle(sensorX, sensorY, sensorWidth, sensorHeight, {
+    isStatic: true,
+    isSensor: true,
+    label: 'lucky-sensor'
+  })
+  sensor.width = sensorWidth
+  sensor.height = sensorHeight
+  sensor.color = '#ff79c6'
+  sensor.renderType = 'sensor'
+  obstacles.push(sensor)
+
+  Matter.World.add(world, obstacles)
+}
+
+function removeOutOfBoundsBodies() {
+  const bodies = Matter.Composite.allBodies(engine.world)
   const bodiesToRemove = bodies.filter(body => {
-    // 静的オブジェクト（壁や床）は削除しない
     if (body.isStatic) return false
-    
-    // 寿命設定があり、かつ生成から時間が経過していたら削除対象
-    if (body.lifeTime && body.createdAt) {
-      return (now - body.createdAt) > body.lifeTime
-    }
+    if (body.position.y > VIRTUAL_HEIGHT + 200) return true
     return false
   })
-
   if (bodiesToRemove.length > 0) {
     Matter.World.remove(engine.world, bodiesToRemove)
   }
@@ -64,79 +151,50 @@ function broadcastPositions(windows) {
     y: body.position.y,
     angle: body.angle,
     label: body.label,
-    width: body.width,
-    height: body.height,
+    width: body.width || 0,
+    height: body.height || 0,
+    radius: body.circleRadius || body.radius || 0,
     color: body.color,
-    text: body.text
+    text: body.text,
+    renderType: body.renderType
   }))
 
-  if (winUser && !winUser.isDestroyed()) {
-    winUser.webContents.send('physics-update', syncData)
-  }
-  if (winOBS && !winOBS.isDestroyed()) {
-    winOBS.webContents.send('physics-update', syncData)
-  }
+  if (winUser && !winUser.isDestroyed()) winUser.webContents.send('physics-update', syncData)
+  if (winOBS && !winOBS.isDestroyed()) winOBS.webContents.send('physics-update', syncData)
 }
 
-// ★変更: 引数に lifeTime を追加
-export function spawnPhysicsComment(text, color, lifeTime = 15000) {
+export function spawnPhysicsComment(text, color) {
   if (!engine) return
 
-  // --- 幅の計算ロジック修正 ---
-  // 文字コードを見て幅を積算する
-  let textWidth = 0
-  for (let i = 0; i < text.length; i++) {
-    const code = text.charCodeAt(i)
-    // 256以上の文字コード（日本語など）は全角扱い、それ以外は半角扱い
-    // ※フォントサイズ24px想定で、少し余裕を持たせた数値にする
-    if (code > 255) {
-      textWidth += 26 // 全角文字の幅
-    } else {
-      textWidth += 16 // 半角文字の幅
-    }
-  }
+  const minX = INFO_AREA.x + 50
+  const maxX = INFO_AREA.x + INFO_AREA.w - 50
   
-  const width = textWidth + 60 // パディング(余白)も少し広げる (+40 -> +60)
-  const height = 60
-  
-  // 出現位置をランダムに（画面幅に収まるように調整）
-  const x = Math.random() * (VIRTUAL_WIDTH - width - 100) + (width / 2) + 50
+  const x = Math.random() * (maxX - minX) + minX
   const y = -100
-
-  const body = Matter.Bodies.rectangle(x, y, width, height, {
+  
+  const radius = 20
+  
+  const body = Matter.Bodies.circle(x, y, radius, {
     restitution: 0.8,
-    friction: 0.005,
+    friction: 0.001,
+    density: 0.04,
     label: 'comment',
-    // カスタムプロパティ
-    width: width,
-    height: height,
+    renderType: 'orb',
     color: color || '#FFFFFF',
-    text: text,
-    createdAt: Date.now(),
-    lifeTime: lifeTime
+    text: text
   })
   
-  // Matter.jsのBodyオブジェクトに直接生やす
-  body.width = width
-  body.height = height
+  body.circleRadius = radius
   body.color = color || '#FFFFFF'
   body.text = text
-  body.createdAt = Date.now()
-  body.lifeTime = lifeTime
 
   Matter.World.add(engine.world, body)
 }
 
 function setupIpcListeners() {
-  // IPC経由の場合も、メインプロセス側で寿命設定を渡すため、ここはシンプルな呼び出しのままでOK
-  // (index.js側で引数を制御します)
   ipcMain.on('set-gravity', (event, { x, y }) => {
-    if (engine) {
-      engine.world.gravity.x = x
-      engine.world.gravity.y = y
-    }
+    if (engine) engine.world.gravity.x = x; engine.world.gravity.y = y;
   })
-  
   ipcMain.on('clear-world', () => {
     if (engine) {
       const bodies = Matter.Composite.allBodies(engine.world)

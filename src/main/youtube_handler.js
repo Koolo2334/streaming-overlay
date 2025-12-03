@@ -1,13 +1,10 @@
 import { LiveChat } from 'youtube-chat'
-// physics.js からコメント生成関数をインポート
+// 物理演算の関数をインポート
 import { spawnPhysicsComment } from './physics'
-import Store from 'electron-store' 
-const store = new Store()
 
 let liveChat = null
 let windowsRef = null
 
-// 現在の状態
 let currentStatus = {
   youtubeConnected: false
 }
@@ -17,7 +14,6 @@ export function initYouTube(windows) {
 }
 
 export async function connectYouTube(channelIdOrUrl) {
-  // 既存の接続を切断
   if (liveChat) {
     liveChat.stop()
     liveChat = null
@@ -27,11 +23,7 @@ export async function connectYouTube(channelIdOrUrl) {
 
   try {
     console.log('Connecting to YouTube...', channelIdOrUrl)
-    
-    // チャンネルIDまたはURLからライブ配信を探して接続
     liveChat = new LiveChat({ channelId: channelIdOrUrl })
-    
-    // 接続開始
     await liveChat.start()
 
     if (!liveChat.liveId) {
@@ -43,23 +35,21 @@ export async function connectYouTube(channelIdOrUrl) {
     console.log(`Connected to Live Stream ID: ${liveChat.liveId}`)
     updateAndBroadcast({ youtubeConnected: true })
 
-    // --- イベントリスナー ---
-    
-    // チャット受信
     liveChat.on('chat', (chatItem) => {
-      const message = chatItem.message.map(part => part.text || '').join('')
+      // 物理演算用には、これまで通りテキスト化して渡す（絵文字は :smile: などの文字になる）
+      const messageText = chatItem.message.map(part => part.text || '').join('')
       const color = `hsl(${Math.random() * 360}, 70%, 60%)`
 
-      // ★追加: ストアから寿命設定を取得
-      const lifeTime = store.get('commentLifeTime') || 15000
+      spawnPhysicsComment(messageText, color)
 
-      // 1. 物理演算コメントとして降らせる (寿命付き)
-      spawnPhysicsComment(message, color, lifeTime)
-
-      // 2. コメントウィンドウに表示
+      // コメントウィンドウ用には、詳細データを含めて送る
       const { winComment } = windowsRef || {}
       if (winComment && !winComment.isDestroyed()) {
-        winComment.webContents.send('new-comment', { text: message, color })
+        winComment.webContents.send('new-comment', { 
+          text: messageText, 
+          messageParts: chatItem.message, // ★追加: 絵文字情報を含む配列
+          color 
+        })
       }
     })
 

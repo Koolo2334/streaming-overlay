@@ -32,10 +32,9 @@ const CommentWindow = () => {
   // リサイズ監視
   useEffect(() => {
     if (!containerRef.current) return
-    const observer = new ResizeObserver(() => {
-      // ★修正
-      const { width, height } = containerRef.current.getBoundingClientRect()
-      if (width > 0 && height > 0) {
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect
         window.api.resizeWindow(Math.ceil(width), Math.ceil(height))
       }
     })
@@ -63,7 +62,24 @@ const CommentWindow = () => {
       <div className="comment-list">
         {comments.map((c, i) => (
           <div key={i} className="comment-item" style={{ borderLeft: `5px solid ${c.color}` }}>
-            <span className="comment-text">{c.text}</span>
+            <span className="comment-text">
+              {/* messageParts がある場合はリッチ表示、なければテキストのみ */}
+              {c.messageParts ? c.messageParts.map((part, index) => {
+                // 画像URLがある場合（絵文字やスタンプ）
+                if (part.url) {
+                  return (
+                    <img 
+                      key={index} 
+                      src={part.url} 
+                      alt={part.text}
+                      className="emoji-img" 
+                    />
+                  )
+                }
+                // 通常のテキスト
+                return <span key={index}>{part.text}</span>
+              }) : c.text}
+            </span>
           </div>
         ))}
         <div ref={bottomRef} />
@@ -94,22 +110,27 @@ const CommentWindow = () => {
         }
         
         .comment-item {
-          background: rgba(30, 30, 30, 0.85); /* 背景を少し濃くして文字を目立たせる */
+          background: rgba(30, 30, 30, 0.85);
           color: white;
-          padding: 10px 14px; /* 余白も少し広げる */
+          padding: 10px 14px;
           margin-bottom: 8px;
           border-radius: 6px;
-          
-          /* ★フォント調整 */
-          font-size: 18px;       /* 14px -> 18px */
-          font-weight: 600;      /* 太字で見やすく */
-          line-height: 1.4;      /* 行間を適切に */
-          text-shadow: 0 1px 2px rgba(0,0,0,0.8); /* 文字の縁取り（影） */
-
+          font-size: 18px;
+          font-weight: 600;
+          line-height: 1.4;
+          text-shadow: 0 1px 2px rgba(0,0,0,0.8);
           animation: slideIn 0.2s ease-out;
           word-break: break-word; 
           white-space: pre-wrap;
         }
+
+        /* ★絵文字用のスタイル */
+        .emoji-img {
+          height: 1.4em; /* 文字より少し大きく */
+          vertical-align: middle; /* 行の中央に揃える */
+          margin: 0 2px;
+        }
+
         @keyframes slideIn {
           from { transform: translateX(-10px); opacity: 0; }
           to { transform: translateX(0); opacity: 1; }
