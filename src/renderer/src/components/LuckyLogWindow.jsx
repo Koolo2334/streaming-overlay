@@ -68,11 +68,15 @@ const LuckyLogWindow = () => {
         {logs.map((log, i) => (
           <div key={i} className="log-item" style={{ borderLeft: `5px solid ${log.color}` }}>
             <div className="log-header">
-              {log.authorIcon && <img src={log.authorIcon} alt="" className="author-icon" />}
-              {/* LuckyLogの場合、isMember情報が送られてきていないと緑にならないので注意。
-                  現在のphysics経由ではisMemberが欠落している可能性が高いが、
-                  取り急ぎクラスを付与する準備だけしておく */}
-              <span className="log-author">{log.authorName || 'Guest'}</span>
+              {log.authorIcon && <img src={log.authorIcon} alt="" className="author-icon" referrerPolicy="no-referrer" />}
+              {/* LuckyLogは常に金色 */}
+              <span className="log-author" style={{ color: '#ffd700' }}>{log.authorName || 'Guest'}</span>
+              
+              {/* バッジ */}
+              {log.authorBadges && log.authorBadges.map((b, k) => (
+                <img key={k} src={b.url} alt={b.label} className="badge-icon" title={b.label} referrerPolicy="no-referrer" />
+              ))}
+
               <span className="log-time">{log.timestamp}</span>
             </div>
             
@@ -128,23 +132,17 @@ const LuckyLogWindow = () => {
           margin-bottom: 4px;
         }
 
-        .author-icon {
-          width: 20px;
-          height: 20px;
-          border-radius: 50%;
-          margin-right: 6px;
-          border: 1px solid #ffd700;
-        }
+        .author-icon { width: 20px; height: 20px; border-radius: 50%; margin-right: 6px; border: 1px solid #ffd700; object-fit: cover; }
+        .badge-icon { width: 14px; height: 14px; margin-left: 4px; object-fit: contain; }
 
         .log-author {
           font-size: 14px;
-          color: #ffd700; /* デフォルトは金色 */
+          color: #ffd700;
           font-weight: bold;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
           text-shadow: 0 1px 1px rgba(0,0,0,0.5);
-          margin-right: 8px;
         }
 
         .log-time {

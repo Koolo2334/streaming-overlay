@@ -12,6 +12,12 @@ export function initYouTube(windows) {
   windowsRef = windows
 }
 
+// ヘルパー: URLを安全な形式(https)に変換
+const safeUrl = (url) => {
+  if (!url) return ''
+  return url.replace(/^http:\/\//, 'https://')
+}
+
 export async function connectYouTube(channelIdOrUrl) {
   if (liveChat) {
     liveChat.stop()
@@ -39,26 +45,27 @@ export async function connectYouTube(channelIdOrUrl) {
       let color = `hsl(${Math.random() * 360}, 70%, 60%)` 
       
       const authorName = chatItem.author.name
-      const authorIcon = chatItem.author.thumbnail?.url || ''
+      // ★修正: HTTPSに変換
+      const authorIcon = safeUrl(chatItem.author.thumbnail?.url)
 
-      // --- ★メンバー判定ロジック (ここを修正) ---
-      // 1. isChatSponsor (メンバー) フラグを直接チェック
+      // メンバー判定
       let isMember = Boolean(chatItem.author.isChatSponsor)
 
-      // 2. フラグがない場合、バッジ情報から推測 (バックアップ)
-      if (!isMember && Array.isArray(chatItem.author.badge)) {
-        isMember = chatItem.author.badge.some(b => {
-          const label = (b.label || '').toLowerCase()
-          // "Member"や"メンバー"を含むかチェック
-          return label.includes('member') || label.includes('メンバー')
+      if (!isMember && chatItem.author.badge) {
+        const badges = [].concat(chatItem.author.badge)
+        isMember = badges.some(b => {
+          if (!b || !b.label) return false
+          const label = b.label.toLowerCase()
+          if (label.includes('member') || label.includes('メンバー')) return true
+          
+          const isMod = label.includes('moderator') || label.includes('モデレーター')
+          const isVerified = label.includes('verified') || label.includes('確認済み') || label.includes('authenticated')
+          const isOwner = label.includes('owner') || label.includes('オーナー')
+          
+          return !isMod && !isVerified && !isOwner
         })
       }
       
-      // デバッグログ
-      if (isMember) {
-        console.log(`[Member Detected] ${authorName}`)
-      }
-
       const superchat = chatItem.superchat
       const supersticker = chatItem.supersticker
 
@@ -68,15 +75,28 @@ export async function connectYouTube(channelIdOrUrl) {
 
       spawnPhysicsComment(message, color, authorName, authorIcon)
 
-      const { winComment, winOBS, winLucky } = windowsRef || {}
+      const { winComment, winOBS } = windowsRef || {}
       
+      // ★修正: バッジURLもHTTPS化して配列にする
+      const rawBadges = chatItem.author.badge ? [].concat(chatItem.author.badge) : []
+      const authorBadges = rawBadges.map(b => ({
+        ...b,
+        url: safeUrl(b.url)
+      }))
+
+      // ステッカーURLもHTTPS化
+      if (supersticker && supersticker.sticker) {
+        supersticker.sticker.url = safeUrl(supersticker.sticker.url)
+      }
+
       const commentData = { 
         text: message, 
         messageParts: chatItem.message, 
         color,
         authorName,
         authorIcon,
-        isMember, // これがtrueになれば緑色になります
+        authorBadges,
+        isMember, 
         superchat,
         supersticker
       }

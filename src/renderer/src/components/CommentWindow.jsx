@@ -59,11 +59,14 @@ const CommentWindow = () => {
           const isSC = !!c.superchat;
           const bgStyle = isSC ? { backgroundColor: c.superchat.color } : {};
           
-          // ★修正: メンバーなら強制的に緑色 (#2ba640) にするスタイルオブジェクトを作成
           const nameStyle = {
             fontWeight: 'bold',
-            color: c.isMember ? '#2ba640' : '#eee', // メンバーなら緑、それ以外は白系
-            textShadow: '0 1px 1px rgba(0,0,0,0.5)'
+            color: c.isMember ? '#2ba640' : '#eee',
+            textShadow: '0 1px 1px rgba(0,0,0,0.5)',
+            fontSize: '14px',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap'
           };
 
           return (
@@ -72,9 +75,11 @@ const CommentWindow = () => {
               {isSC && (
                 <div className="sc-header">
                   <div className="comment-header">
-                    {c.authorIcon && <img src={c.authorIcon} alt="" className="author-icon" />}
-                    {/* スタイルを適用 */}
+                    {c.authorIcon && <img src={c.authorIcon} alt="" className="author-icon" referrerPolicy="no-referrer" />}
                     <div className="comment-author" style={nameStyle}>{c.authorName || 'Anonymous'}</div>
+                    {c.authorBadges && c.authorBadges.map((b, k) => (
+                      <img key={k} src={b.url} alt={b.label} className="badge-icon" title={b.label} referrerPolicy="no-referrer" />
+                    ))}
                   </div>
                   <div className="sc-amount">{c.superchat.amount}</div>
                 </div>
@@ -82,19 +87,21 @@ const CommentWindow = () => {
 
               {!isSC && (
                 <div className="comment-header">
-                  {c.authorIcon && <img src={c.authorIcon} alt="" className="author-icon" />}
-                  {/* スタイルを適用 */}
+                  {c.authorIcon && <img src={c.authorIcon} alt="" className="author-icon" referrerPolicy="no-referrer" />}
                   <div className="comment-author" style={nameStyle}>{c.authorName || 'Anonymous'}</div>
+                  {c.authorBadges && c.authorBadges.map((b, k) => (
+                    <img key={k} src={b.url} alt={b.label} className="badge-icon" title={b.label} referrerPolicy="no-referrer" />
+                  ))}
                 </div>
               )}
               
               <div className="comment-content">
                 {c.supersticker ? (
-                  <img src={c.supersticker.sticker.url} alt="sticker" className="sticker-img" />
+                  <img src={c.supersticker.sticker.url} alt="sticker" className="sticker-img" referrerPolicy="no-referrer" />
                 ) : (
                   <span className="comment-text">
                     {c.messageParts ? c.messageParts.map((part, index) => (
-                      part.url ? <img key={index} src={part.url} alt="" className="emoji-img" /> : <span key={index}>{part.text}</span>
+                      part.url ? <img key={index} src={part.url} alt="" className="emoji-img" referrerPolicy="no-referrer" /> : <span key={index}>{part.text}</span>
                     )) : c.text}
                   </span>
                 )}
@@ -130,11 +137,11 @@ const CommentWindow = () => {
         .comment-item.superchat .comment-content { padding: 8px 12px; background: rgba(255,255,255,0.7); color: black; }
         
         .comment-header { display: flex; align-items: center; margin-bottom: 4px; }
-        .author-icon { width: 24px; height: 24px; border-radius: 50%; margin-right: 8px; }
+        .author-icon { width: 24px; height: 24px; border-radius: 50%; margin-right: 8px; object-fit: cover; }
+        .badge-icon { width: 16px; height: 16px; margin-left: 4px; object-fit: contain; }
         
         .comment-author {
           font-size: 14px;
-          /* colorはインラインスタイルで制御するため削除 */
           overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
 

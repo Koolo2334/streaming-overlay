@@ -60,28 +60,26 @@ const OBS_View = () => {
 
   return (
     <div className={`obs-container scene-${currentScene}`}>
-      
+      {/* ...Backgrounds... */}
       <div className="bg-mask-container">
         <div className="bg-part top" style={{ top: 0, left: 0, width: '100%', height: y }} />
         <div className="bg-part bottom" style={{ top: y + height, left: 0, width: '100%', height: FULL_HEIGHT - (y + height) }} />
         <div className="bg-part left" style={{ top: y, left: 0, width: x, height: height }} />
         <div className="bg-part right" style={{ top: y, left: x + width, width: FULL_WIDTH - (x + width), height: height }} />
       </div>
-
       <div className={`full-cover-bg ${currentScene !== 'main' ? 'visible' : ''}`} />
 
       <div className={`scene-content main-scene ${currentScene === 'main' ? 'active' : ''}`}>
-        
+        {/* Game Window */}
         <div className="tech-window game-window" style={{ left: x, top: y, width, height }}>
           <div className="window-header">
             <div className="window-title">🔵 GAME_CAPTURE.exe</div>
             <div className="window-controls"><span/><span/><span/></div>
           </div>
-          <div className="window-body transparent-body">
-            <div className="rec-indicator">● REC</div>
-          </div>
+          <div className="window-body transparent-body"><div className="rec-indicator">● REC</div></div>
         </div>
 
+        {/* Comment Window */}
         <div className="tech-window comment-window" style={{ left: commentX, top: commentY, width: commentW, height: commentH }}>
           <div className="window-header">
             <div className="window-title">🟡 CHAT_STREAM.log</div>
@@ -92,41 +90,44 @@ const OBS_View = () => {
               {comments.map((c, i) => {
                 const isSC = !!c.superchat;
                 const bgStyle = isSC ? { backgroundColor: c.superchat.color } : {};
-                
-                // ★修正: メンバーなら強制的に緑色
                 const nameStyle = {
                   fontWeight: 'bold',
                   color: c.isMember ? '#2ba640' : '#eee',
-                  textShadow: '0 1px 1px rgba(0,0,0,0.5)'
+                  textShadow: '0 1px 1px rgba(0,0,0,0.5)',
+                  fontSize: '14px',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
                 };
 
                 return (
                   <li key={i} className={`comment-row ${isSC ? 'superchat' : ''}`} style={{ borderLeft: isSC ? 'none' : `3px solid ${c.color}`, ...bgStyle }}>
-                    
                     {isSC && (
                       <div className="sc-header-row">
                         <div className="comment-header">
-                          {c.authorIcon && <img src={c.authorIcon} alt="" className="author-icon" />}
+                          {c.authorIcon && <img src={c.authorIcon} alt="" className="author-icon" referrerPolicy="no-referrer" />}
                           <div className="comment-author" style={nameStyle}>{c.authorName || 'Anonymous'}</div>
+                          {c.authorBadges && c.authorBadges.map((b, k) => (
+                            <img key={k} src={b.url} alt={b.label} className="badge-icon" title={b.label} referrerPolicy="no-referrer" />
+                          ))}
                         </div>
                         <div className="sc-amount">{c.superchat.amount}</div>
                       </div>
                     )}
-
                     {!isSC && (
                       <div className="comment-header">
-                        {c.authorIcon && <img src={c.authorIcon} alt="" className="author-icon" />}
+                        {c.authorIcon && <img src={c.authorIcon} alt="" className="author-icon" referrerPolicy="no-referrer" />}
                         <div className="comment-author" style={nameStyle}>{c.authorName || 'Anonymous'}</div>
+                        {c.authorBadges && c.authorBadges.map((b, k) => (
+                          <img key={k} src={b.url} alt={b.label} className="badge-icon" title={b.label} referrerPolicy="no-referrer" />
+                        ))}
                       </div>
                     )}
-
                     <div className="comment-content">
                       {c.supersticker ? (
-                        <img src={c.supersticker.sticker.url} alt="sticker" className="sticker-img" />
+                        <img src={c.supersticker.sticker.url} alt="sticker" className="sticker-img" referrerPolicy="no-referrer" />
                       ) : (
                         <span className="comment-text">
                           {c.messageParts ? c.messageParts.map((part, idx) => (
-                            part.url ? <img key={idx} src={part.url} alt="" className="emoji" /> : <span key={idx}>{part.text}</span>
+                            part.url ? <img key={idx} src={part.url} alt="" className="emoji" referrerPolicy="no-referrer" /> : <span key={idx}>{part.text}</span>
                           )) : c.text}
                         </span>
                       )}
@@ -139,33 +140,21 @@ const OBS_View = () => {
           </div>
         </div>
 
-        {/* ...他パーツ省略なし... */}
+        {/* ...Info, Avatar, WinZone... */}
         <div className="tech-window info-window" style={{ left: infoX, top: infoY, width: infoW, height: infoH }}>
-          <div className="window-header">
-            <div className="window-title">🟣 SYSTEM_STATUS</div>
-            <div className="window-controls"><span/><span/><span/></div>
-          </div>
+          <div className="window-header"><div className="window-title">🟣 SYSTEM_STATUS</div><div className="window-controls"><span/><span/><span/></div></div>
           <div className="window-body flex-center" style={{ position: 'relative' }}>
-            <div className="scrolling-text">
-              🎵 Now Playing: Cyber Pop Synth // 📢 Don't forget to Subscribe! // 🚀 System Engineer Gaming
-            </div>
+            <div className="scrolling-text">🎵 Now Playing: Cyber Pop Synth // 📢 Don't forget to Subscribe! // 🚀 System Engineer Gaming</div>
           </div>
         </div>
-
         <div className="avatar-area" style={{ left: avatarX, top: avatarY, width: avatarW, height: avatarH }}>
-          <div className="avatar-placeholder">
-            <div className="avatar-circle"></div>
-            <div className="speech-bubble">HELLO WORLD!</div>
-          </div>
+          <div className="avatar-placeholder"><div className="avatar-circle"></div><div className="speech-bubble">HELLO WORLD!</div></div>
         </div>
-
         <div className="target-zone-container" style={{ position: 'absolute', bottom: '0px', left: infoX, width: infoW, display: 'flex', justifyContent: 'center' }}>
           <div className="target-zone">WIN ZONE</div>
         </div>
-
       </div>
 
-      {/* ...Scenes... */}
       <div className={`scene-content op-scene ${currentScene === 'op' ? 'active' : ''}`}>
         <div className="pop-box"><h1>STARTING!</h1><div className="loader">Loading...</div></div>
       </div>
@@ -179,7 +168,7 @@ const OBS_View = () => {
             <h1 className="lucky-title">✨ JACKPOT!! ✨</h1>
             <div className="lucky-comment" style={{ color: luckyData.color }}>
               <div style={{ fontSize: '20px', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {luckyData.authorIcon && <img src={luckyData.authorIcon} alt="" style={{ width: '30px', height: '30px', borderRadius: '50%', marginRight: '10px', border: '2px solid #ffd700' }} />}
+                {luckyData.authorIcon && <img src={luckyData.authorIcon} alt="" style={{ width: '30px', height: '30px', borderRadius: '50%', marginRight: '10px', border: '2px solid #ffd700' }} referrerPolicy="no-referrer" />}
                 <span>Winner: {luckyData.authorName}</span>
               </div>
               {luckyData.text}
@@ -193,7 +182,6 @@ const OBS_View = () => {
       </div>
 
       <style>{`
-        /* ...CSS... */
         :root { --col-bg: #1e1e2e; --col-win-bg: #282a36; --col-border: #44475a; --col-cyan: #8be9fd; --col-pink: #ff79c6; --col-yellow: #f1fa8c; --col-purple: #bd93f9; --col-text: #f8f8f2; }
         .obs-container { position: relative; width: 1920px; height: 1080px; overflow: hidden; font-family: 'Consolas', monospace; color: var(--col-text); }
         .bg-part, .full-cover-bg { position: absolute; background-color: var(--col-bg); background-image: radial-gradient(var(--col-border) 15%, transparent 16%); background-size: 20px 20px; z-index: 5; }
@@ -239,8 +227,9 @@ const OBS_View = () => {
         .comment-row.superchat .comment-content { padding: 6px 10px; background: rgba(255,255,255,0.7); }
 
         .comment-header { display: flex; align-items: center; margin-bottom: 4px; }
-        .author-icon { width: 20px; height: 20px; border-radius: 50%; margin-right: 6px; }
-        .comment-author { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* color削除 */
+        .author-icon { width: 20px; height: 20px; border-radius: 50%; margin-right: 6px; object-fit: cover; }
+        .badge-icon { width: 16px; height: 16px; margin-left: 4px; object-fit: contain; }
+        .comment-author { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .comment-content { padding-left: 26px; }
         .comment-row.superchat .comment-content { padding-left: 10px; }
 
