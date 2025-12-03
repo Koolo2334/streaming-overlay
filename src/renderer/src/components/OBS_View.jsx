@@ -5,10 +5,8 @@ import { OBS_GAME_LAYOUT } from '../constants'
 const OBS_View = () => {
   const [currentScene, setCurrentScene] = useState('main')
   const [luckyData, setLuckyData] = useState(null)
-  
-  // ★追加: コメントリスト用State
   const [comments, setComments] = useState([])
-  const commentBottomRef = useRef(null) // 自動スクロール用
+  const commentBottomRef = useRef(null)
 
   const { x, y, width, height } = OBS_GAME_LAYOUT
   const FULL_WIDTH = 1920
@@ -29,23 +27,18 @@ const OBS_View = () => {
   const avatarH = infoH
 
   useEffect(() => {
-    // シーン変更受信
     const handleSceneChange = (sceneName) => setCurrentScene(sceneName)
     if (window.api.onSceneChange) window.api.onSceneChange(handleSceneChange)
 
-    // ラッキーヒット受信
     const handleLuckyHit = (data) => {
       setLuckyData(data)
       setTimeout(() => setLuckyData(null), 3000)
     }
     if (window.api.onLuckyHit) window.api.onLuckyHit(handleLuckyHit)
 
-    // ★追加: コメント受信
     const handleNewComment = (data) => {
-      // 最新30件を表示
       setComments((prev) => [...prev, data].slice(-30))
     }
-    // preload経由でリスナー登録 (CommentWindowと同じイベントをリッスン)
     if (window.api.on) {
       window.api.on('new-comment', handleNewComment)
     }
@@ -54,12 +47,11 @@ const OBS_View = () => {
       if (window.api.removeAllListeners) {
         window.api.removeAllListeners('change-scene')
         window.api.removeAllListeners('lucky-hit')
-        window.api.removeAllListeners('new-comment') // 解除
+        window.api.removeAllListeners('new-comment')
       }
     }
   }, [])
 
-  // ★追加: コメントが更新されたら自動スクロール
   useEffect(() => {
     if (commentBottomRef.current) {
       commentBottomRef.current.scrollIntoView({ behavior: 'smooth' })
@@ -69,7 +61,6 @@ const OBS_View = () => {
   return (
     <div className={`obs-container scene-${currentScene}`}>
       
-      {/* 背景マスク */}
       <div className="bg-mask-container">
         <div className="bg-part top" style={{ top: 0, left: 0, width: '100%', height: y }} />
         <div className="bg-part bottom" style={{ top: y + height, left: 0, width: '100%', height: FULL_HEIGHT - (y + height) }} />
@@ -79,10 +70,8 @@ const OBS_View = () => {
 
       <div className={`full-cover-bg ${currentScene !== 'main' ? 'visible' : ''}`} />
 
-      {/* Main Scene */}
       <div className={`scene-content main-scene ${currentScene === 'main' ? 'active' : ''}`}>
         
-        {/* Game Window */}
         <div className="tech-window game-window" style={{ left: x, top: y, width, height }}>
           <div className="window-header">
             <div className="window-title">🔵 GAME_CAPTURE.exe</div>
@@ -93,7 +82,7 @@ const OBS_View = () => {
           </div>
         </div>
 
-        {/* ★変更: Comment Window (中身を実装) */}
+        {/* Comment Window */}
         <div className="tech-window comment-window" style={{ left: commentX, top: commentY, width: commentW, height: commentH }}>
           <div className="window-header">
             <div className="window-title">🟡 CHAT_STREAM.log</div>
@@ -101,23 +90,50 @@ const OBS_View = () => {
           </div>
           <div className="window-body comment-list-container">
             <ul className="comment-list">
-              {comments.map((c, i) => (
-                <li key={i} className="comment-row" style={{ borderLeftColor: c.color }}>
-                  <span className="comment-content">
-                    {c.messageParts ? c.messageParts.map((part, idx) => (
-                      part.url ? 
-                        <img key={idx} src={part.url} alt="" className="emoji" /> : 
-                        <span key={idx}>{part.text}</span>
-                    )) : c.text}
-                  </span>
-                </li>
-              ))}
+              {comments.map((c, i) => {
+                const isSC = !!c.superchat;
+                const bgStyle = isSC ? { backgroundColor: c.superchat.color } : {};
+                
+                return (
+                  <li key={i} className={`comment-row ${isSC ? 'superchat' : ''}`} style={{ borderLeft: isSC ? 'none' : `3px solid ${c.color}`, ...bgStyle }}>
+                    
+                    {isSC && (
+                      <div className="sc-header-row">
+                        <div className="comment-header">
+                          {c.authorIcon && <img src={c.authorIcon} alt="" className="author-icon" />}
+                          <div className={`comment-author ${c.isMember ? 'member' : ''}`}>{c.authorName || 'Anonymous'}</div>
+                        </div>
+                        <div className="sc-amount">{c.superchat.amount}</div>
+                      </div>
+                    )}
+
+                    {!isSC && (
+                      <div className="comment-header">
+                        {c.authorIcon && <img src={c.authorIcon} alt="" className="author-icon" />}
+                        <div className={`comment-author ${c.isMember ? 'member' : ''}`}>{c.authorName || 'Anonymous'}</div>
+                      </div>
+                    )}
+
+                    <div className="comment-content">
+                      {c.supersticker ? (
+                        <img src={c.supersticker.sticker.url} alt="sticker" className="sticker-img" />
+                      ) : (
+                        <span className="comment-text">
+                          {c.messageParts ? c.messageParts.map((part, idx) => (
+                            part.url ? <img key={idx} src={part.url} alt="" className="emoji" /> : <span key={idx}>{part.text}</span>
+                          )) : c.text}
+                        </span>
+                      )}
+                    </div>
+                  </li>
+                )
+              })}
               <div ref={commentBottomRef} />
             </ul>
           </div>
         </div>
 
-        {/* Info Window */}
+        {/* ... (他パーツ省略なしで完全版) ... */}
         <div className="tech-window info-window" style={{ left: infoX, top: infoY, width: infoW, height: infoH }}>
           <div className="window-header">
             <div className="window-title">🟣 SYSTEM_STATUS</div>
@@ -130,7 +146,6 @@ const OBS_View = () => {
           </div>
         </div>
 
-        {/* Avatar Area */}
         <div className="avatar-area" style={{ left: avatarX, top: avatarY, width: avatarW, height: avatarH }}>
           <div className="avatar-placeholder">
             <div className="avatar-circle"></div>
@@ -138,21 +153,12 @@ const OBS_View = () => {
           </div>
         </div>
 
-        {/* WinZone */}
-        <div className="target-zone-container" style={{ 
-          position: 'absolute', 
-          bottom: '0px', 
-          left: infoX, 
-          width: infoW, 
-          display: 'flex', 
-          justifyContent: 'center' 
-        }}>
+        <div className="target-zone-container" style={{ position: 'absolute', bottom: '0px', left: infoX, width: infoW, display: 'flex', justifyContent: 'center' }}>
           <div className="target-zone">WIN ZONE</div>
         </div>
 
       </div>
 
-      {/* OP/ED Scenes */}
       <div className={`scene-content op-scene ${currentScene === 'op' ? 'active' : ''}`}>
         <div className="pop-box"><h1>STARTING!</h1><div className="loader">Loading...</div></div>
       </div>
@@ -160,37 +166,28 @@ const OBS_View = () => {
         <div className="pop-box"><h1>SEE YOU!</h1><p>Thanks for watching</p></div>
       </div>
 
-      {/* Lucky Overlay */}
       {luckyData && (
-        <div className="lucky-overlay" style={{
-          left: infoX, width: infoW, bottom: 0
-        }}>
+        <div className="lucky-overlay" style={{ left: infoX, width: infoW, bottom: 0 }}>
           <div className="lucky-box">
             <h1 className="lucky-title">✨ JACKPOT!! ✨</h1>
             <div className="lucky-comment" style={{ color: luckyData.color }}>
+              <div style={{ fontSize: '20px', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {luckyData.authorIcon && <img src={luckyData.authorIcon} alt="" style={{ width: '30px', height: '30px', borderRadius: '50%', marginRight: '10px', border: '2px solid #ffd700' }} />}
+                <span>Winner: {luckyData.authorName}</span>
+              </div>
               {luckyData.text}
             </div>
           </div>
         </div>
       )}
 
-      {/* Physics */}
       <div className="physics-layer">
         <EffectCanvas viewMode="obs" />
       </div>
 
       <style>{`
-        /* ... (既存のスタイル) ... */
-        :root {
-          --col-bg: #1e1e2e;
-          --col-win-bg: #282a36;
-          --col-border: #44475a;
-          --col-cyan: #8be9fd;
-          --col-pink: #ff79c6;
-          --col-yellow: #f1fa8c;
-          --col-purple: #bd93f9;
-          --col-text: #f8f8f2;
-        }
+        /* ... CSS ... */
+        :root { --col-bg: #1e1e2e; --col-win-bg: #282a36; --col-border: #44475a; --col-cyan: #8be9fd; --col-pink: #ff79c6; --col-yellow: #f1fa8c; --col-purple: #bd93f9; --col-text: #f8f8f2; }
         .obs-container { position: relative; width: 1920px; height: 1080px; overflow: hidden; font-family: 'Consolas', monospace; color: var(--col-text); }
         .bg-part, .full-cover-bg { position: absolute; background-color: var(--col-bg); background-image: radial-gradient(var(--col-border) 15%, transparent 16%); background-size: 20px 20px; z-index: 5; }
         .full-cover-bg { inset: 0; z-index: 6; opacity: 0; transition: opacity 0.5s; pointer-events: none; }
@@ -224,37 +221,25 @@ const OBS_View = () => {
         .speech-bubble { position: absolute; top: 20px; right: 20px; background: white; color: black; padding: 10px 20px; border-radius: 20px; border-bottom-left-radius: 0; font-weight: bold; box-shadow: 4px 4px 0 rgba(0,0,0,0.2); }
         .target-zone { width: 200px; height: 20px; background: rgba(255, 121, 198, 0.5); border: 2px dashed var(--col-pink); border-bottom: none; border-radius: 4px 4px 0 0; display: flex; justify-content: center; align-items: flex-start; color: white; font-weight: bold; font-size: 10px; box-shadow: 0 0 20px var(--col-pink); z-index: 60; }
         
-        /* ★追加: コメントリストのスタイル */
-        .comment-list-container {
-          overflow-y: hidden; /* スクロールバーは隠す */
-          display: flex;
-          flex-direction: column;
-          justify-content: flex-end; /* 下から積み上げ */
-        }
-        .comment-list {
-          list-style: none;
-          padding: 0; margin: 0;
-          overflow-y: auto;
-          scrollbar-width: none;
-        }
+        .comment-list-container { overflow-y: hidden; display: flex; flex-direction: column; justify-content: flex-end; }
+        .comment-list { list-style: none; padding: 0; margin: 0; overflow-y: auto; scrollbar-width: none; }
         .comment-list::-webkit-scrollbar { display: none; }
         
-        .comment-row {
-          margin-bottom: 8px;
-          padding: 6px 10px;
-          background: rgba(0, 0, 0, 0.3);
-          border-left: 3px solid #fff;
-          border-radius: 4px;
-          animation: slideIn 0.3s ease-out;
-          font-size: 16px;
-          word-break: break-word;
-          line-height: 1.4;
-        }
-        .emoji {
-          height: 1.4em;
-          vertical-align: middle;
-          margin: 0 2px;
-        }
+        .comment-row { margin-bottom: 8px; padding: 6px 10px; background: rgba(0, 0, 0, 0.3); border-left: 3px solid #fff; border-radius: 4px; animation: slideIn 0.3s ease-out; font-size: 16px; word-break: break-word; line-height: 1.4; display: flex; flex-direction: column; }
+        .comment-row.superchat { padding: 0; overflow: hidden; color: black; text-shadow: none; }
+        .sc-header-row { padding: 6px 10px; background: rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; }
+        .sc-amount { font-weight: 900; }
+        .comment-row.superchat .comment-content { padding: 6px 10px; background: rgba(255,255,255,0.7); }
+
+        .comment-header { display: flex; align-items: center; margin-bottom: 4px; }
+        .author-icon { width: 20px; height: 20px; border-radius: 50%; margin-right: 6px; }
+        .comment-author { font-size: 14px; color: #eee; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 1px 1px rgba(0,0,0,0.5); }
+        .comment-author.member { color: #2ba640 !important; }
+        .comment-content { padding-left: 26px; }
+        .comment-row.superchat .comment-content { padding-left: 10px; }
+
+        .emoji { height: 1.4em; vertical-align: middle; margin: 0 2px; }
+        .sticker-img { max-width: 80px; max-height: 80px; display: block; margin: 5px 0; }
         @keyframes slideIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }
 
         .pop-box { background: white; color: black; padding: 40px 80px; border: 4px solid black; box-shadow: 15px 15px 0 var(--col-purple); text-align: center; transform: rotate(-2deg); }

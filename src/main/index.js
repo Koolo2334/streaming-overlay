@@ -167,7 +167,8 @@ function createWindows() {
   const obsConfig = store.get('obsConfig')
   initOBS({ winAdmin, winStatus }, obsConfig)
 
-  initYouTube({ winAdmin, winComment })
+  // ★修正: winOBS を追加で渡す
+  initYouTube({ winAdmin, winComment, winOBS })
   
   registerShortcuts()
 }

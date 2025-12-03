@@ -3,16 +3,13 @@ import React, { useState, useEffect, useRef } from 'react'
 const CommentWindow = () => {
   const [comments, setComments] = useState([])
   const [isInteractive, setIsInteractive] = useState(false)
-  
   const bottomRef = useRef(null)
   const containerRef = useRef(null)
 
   useEffect(() => {
-    // Adminモード同期
     const handleModeChange = (mode) => setIsInteractive(mode)
     window.api.on('admin-mode-changed', handleModeChange)
 
-    // コメント受信
     const handleNewComment = (data) => {
       setComments((prev) => [...prev, data].slice(-50))
     }
@@ -24,18 +21,18 @@ const CommentWindow = () => {
     }
   }, [])
 
-  // 自動スクロール
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [comments])
 
-  // リサイズ監視
   useEffect(() => {
     if (!containerRef.current) return
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        const { width, height } = entry.contentRect
-        window.api.resizeWindow(Math.ceil(width), Math.ceil(height))
+        const { width, height } = containerRef.current.getBoundingClientRect()
+        if (width > 0 && height > 0) {
+          window.api.resizeWindow(Math.ceil(width), Math.ceil(height))
+        }
       }
     })
     observer.observe(containerRef.current)
@@ -48,93 +45,122 @@ const CommentWindow = () => {
       className={`window-container ${isInteractive ? 'interactive' : ''}`}
       style={{
         resize: isInteractive ? 'both' : 'none',
-        overflow: 'hidden',
+        overflow: isInteractive ? 'auto' : 'hidden',
         width: '100%',
         height: '100%'
       }}
     >
       {isInteractive && (
-        <div className="drag-handle">
-          <span>💬 Comments</span>
-        </div>
+        <div className="drag-handle"><span>💬 Comments</span></div>
       )}
       
       <div className="comment-list">
-        {comments.map((c, i) => (
-          <div key={i} className="comment-item" style={{ borderLeft: `5px solid ${c.color}` }}>
-            <span className="comment-text">
-              {/* messageParts がある場合はリッチ表示、なければテキストのみ */}
-              {c.messageParts ? c.messageParts.map((part, index) => {
-                // 画像URLがある場合（絵文字やスタンプ）
-                if (part.url) {
-                  return (
-                    <img 
-                      key={index} 
-                      src={part.url} 
-                      alt={part.text}
-                      className="emoji-img" 
-                    />
-                  )
-                }
-                // 通常のテキスト
-                return <span key={index}>{part.text}</span>
-              }) : c.text}
-            </span>
-          </div>
-        ))}
+        {comments.map((c, i) => {
+          const isSC = !!c.superchat;
+          const bgStyle = isSC ? { backgroundColor: c.superchat.color } : {};
+          
+          return (
+            <div key={i} className={`comment-item ${isSC ? 'superchat' : ''}`} style={{ borderLeft: isSC ? 'none' : `5px solid ${c.color}`, ...bgStyle }}>
+              
+              {isSC && (
+                <div className="sc-header">
+                  <div className="comment-header">
+                    {c.authorIcon && <img src={c.authorIcon} alt="" className="author-icon" />}
+                    {/* スパチャの場合もメンバーなら緑にする */}
+                    <div className={`comment-author ${c.isMember ? 'member' : ''}`}>{c.authorName || 'Anonymous'}</div>
+                  </div>
+                  <div className="sc-amount">{c.superchat.amount}</div>
+                </div>
+              )}
+
+              {!isSC && (
+                <div className="comment-header">
+                  {c.authorIcon && <img src={c.authorIcon} alt="" className="author-icon" />}
+                  <div className={`comment-author ${c.isMember ? 'member' : ''}`}>{c.authorName || 'Anonymous'}</div>
+                </div>
+              )}
+              
+              <div className="comment-content">
+                {c.supersticker ? (
+                  <img src={c.supersticker.sticker.url} alt="sticker" className="sticker-img" />
+                ) : (
+                  <span className="comment-text">
+                    {c.messageParts ? c.messageParts.map((part, index) => (
+                      part.url ? <img key={index} src={part.url} alt="" className="emoji-img" /> : <span key={index}>{part.text}</span>
+                    )) : c.text}
+                  </span>
+                )}
+              </div>
+            </div>
+          )
+        })}
         <div ref={bottomRef} />
       </div>
 
       <style>{`
-        .window-container {
-          display: flex;
-          flex-direction: column;
-          background: rgba(0, 0, 0, 0.5);
-          border-radius: 8px;
-        }
-        .window-container:not(.interactive) {
-          background: transparent;
-        }
-        .window-container.interactive {
-          overflow: auto !important; 
-        }
-
-        .comment-list {
-          flex: 1;
-          overflow-y: auto;
-          padding: 10px;
-          scrollbar-width: none;
-        }
-        .comment-list::-webkit-scrollbar {
-          display: none;
-        }
+        .window-container { display: flex; flex-direction: column; background: rgba(0, 0, 0, 0.5); border-radius: 8px; }
+        .window-container:not(.interactive) { background: transparent; }
+        .window-container.interactive { overflow: auto !important; }
+        .comment-list { flex: 1; overflow-y: auto; padding: 10px; scrollbar-width: none; }
+        .comment-list::-webkit-scrollbar { display: none; }
         
         .comment-item {
           background: rgba(30, 30, 30, 0.85);
           color: white;
-          padding: 10px 14px;
+          padding: 8px 12px;
           margin-bottom: 8px;
           border-radius: 6px;
-          font-size: 18px;
-          font-weight: 600;
-          line-height: 1.4;
-          text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+          display: flex;
+          flex-direction: column;
           animation: slideIn 0.2s ease-out;
           word-break: break-word; 
-          white-space: pre-wrap;
         }
 
-        /* ★絵文字用のスタイル */
-        .emoji-img {
-          height: 1.4em; /* 文字より少し大きく */
-          vertical-align: middle; /* 行の中央に揃える */
-          margin: 0 2px;
+        .comment-item.superchat {
+          padding: 0;
+          overflow: hidden;
+          color: #000;
+          text-shadow: none;
+        }
+        .sc-header {
+          padding: 8px 12px;
+          background: rgba(0,0,0,0.1);
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        .sc-amount { font-weight: 900; font-size: 16px; }
+        .comment-item.superchat .comment-content {
+          padding: 8px 12px;
+          background: rgba(255,255,255,0.7);
+          color: black;
+        }
+        
+        .comment-header { display: flex; align-items: center; margin-bottom: 4px; }
+        .author-icon { width: 24px; height: 24px; border-radius: 50%; margin-right: 8px; }
+        
+        .comment-author {
+          font-size: 14px;
+          color: #eee;
+          font-weight: bold;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+          text-shadow: 0 1px 1px rgba(0,0,0,0.5);
+        }
+        /* ★緑色を強制適用 */
+        .comment-author.member {
+          color: #2ba640 !important;
         }
 
-        @keyframes slideIn {
-          from { transform: translateX(-10px); opacity: 0; }
-          to { transform: translateX(0); opacity: 1; }
+        .comment-text {
+          font-size: 18px; font-weight: 600; line-height: 1.4;
+          text-shadow: 0 1px 2px rgba(0,0,0,0.8);
         }
+        .comment-item.superchat .comment-text { text-shadow: none; }
+
+        .emoji-img { height: 1.4em; vertical-align: middle; margin: 0 2px; }
+        .sticker-img { max-width: 100px; max-height: 100px; display: block; margin: 5px 0; }
+
+        @keyframes slideIn { from { transform: translateX(-10px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
       `}</style>
     </div>
   )

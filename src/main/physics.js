@@ -4,23 +4,21 @@ import Matter from 'matter-js'
 const VIRTUAL_WIDTH = 1920
 const VIRTUAL_HEIGHT = 1080
 
-// レイアウト定数 (constants.js の変更に合わせて更新)
+// レイアウト定数 (constants.js と合わせる)
 const LAYOUT = {
   gameX: 30,
   gameY: 30,
   gameW: 1440,
-  gameH: 846, // 810 -> 846 に変更
-  gap: 30
+  gameH: 846,
+  gap: 20
 }
 
-// 情報ウィンドウのエリア
-// Y = 30 + 846 + 30 = 896
-// H = 1080 - 896 - 30 = 144 (以前より狭くなる)
+// 情報ウィンドウのエリア定義
 const INFO_AREA = {
   x: LAYOUT.gameX,
   y: LAYOUT.gameY + LAYOUT.gameH + LAYOUT.gap,
   w: LAYOUT.gameW,
-  h: VIRTUAL_HEIGHT - (LAYOUT.gameY + LAYOUT.gameH + LAYOUT.gap) - 30
+  h: VIRTUAL_HEIGHT - (LAYOUT.gameY + LAYOUT.gameH + LAYOUT.gap) - 40
 }
 
 let engine
@@ -32,7 +30,6 @@ export function initPhysics(windows) {
 
   const wallOptions = { isStatic: true, render: { visible: false } }
   
-  // 左右の壁
   const leftWall = Matter.Bodies.rectangle(INFO_AREA.x - 20, VIRTUAL_HEIGHT / 2, 40, VIRTUAL_HEIGHT * 2, wallOptions)
   const rightWall = Matter.Bodies.rectangle(INFO_AREA.x + INFO_AREA.w + 20, VIRTUAL_HEIGHT / 2, 40, VIRTUAL_HEIGHT * 2, wallOptions)
 
@@ -48,14 +45,17 @@ export function initPhysics(windows) {
       const comment = bodyA.label === 'comment' ? bodyA : bodyB.label === 'comment' ? bodyB : null
 
       if (sensor && comment) {
-        const hitData = { text: comment.text, color: comment.color }
-        
-        // 1. OBSの演出用
+        // 当たりデータを送信 (アイコンURLも含める)
+        const hitData = { 
+          text: comment.text, 
+          color: comment.color,
+          authorName: comment.authorName,
+          authorIcon: comment.authorIcon // ★追加
+        }
+
         if (windows.winOBS && !windows.winOBS.isDestroyed()) {
           windows.winOBS.webContents.send('lucky-hit', hitData)
         }
-        
-        // 2. ★追加: ログウィンドウ用
         if (windows.winLucky && !windows.winLucky.isDestroyed()) {
           windows.winLucky.webContents.send('lucky-hit', hitData)
         }
@@ -85,7 +85,6 @@ function setupPinballGimmicks(world) {
   const spacing = 60 
 
   // 1. 上段の杭
-  // 情報ウィンドウが狭くなったので、枠ギリギリではなく少し内側に配置
   const topY = INFO_AREA.y + 30
   for (let x = startX; x <= endX; x += spacing) {
     const peg = Matter.Bodies.circle(x, topY, pegRadius, pegOptions)
@@ -96,7 +95,6 @@ function setupPinballGimmicks(world) {
   }
 
   // 2. 下段の杭
-  // WinZoneへの門番
   const bottomY = INFO_AREA.y + INFO_AREA.h - 20
   for (let x = startX + (spacing/2); x <= endX - (spacing/2); x += spacing) {
     const centerX = INFO_AREA.x + (INFO_AREA.w / 2)
@@ -163,7 +161,8 @@ function broadcastPositions(windows) {
   if (winOBS && !winOBS.isDestroyed()) winOBS.webContents.send('physics-update', syncData)
 }
 
-export function spawnPhysicsComment(text, color) {
+// ★修正: 引数に authorIcon を追加し、保存する
+export function spawnPhysicsComment(text, color, authorName = 'Anonymous', authorIcon = '') {
   if (!engine) return
 
   const minX = INFO_AREA.x + 50
@@ -171,7 +170,6 @@ export function spawnPhysicsComment(text, color) {
   
   const x = Math.random() * (maxX - minX) + minX
   const y = -100
-  
   const radius = 20
   
   const body = Matter.Bodies.circle(x, y, radius, {
@@ -181,12 +179,16 @@ export function spawnPhysicsComment(text, color) {
     label: 'comment',
     renderType: 'orb',
     color: color || '#FFFFFF',
-    text: text
+    text: text,
+    authorName: authorName,
+    authorIcon: authorIcon // ★追加
   })
   
   body.circleRadius = radius
   body.color = color || '#FFFFFF'
   body.text = text
+  body.authorName = authorName
+  body.authorIcon = authorIcon // ★追加
 
   Matter.World.add(engine.world, body)
 }

@@ -1,5 +1,4 @@
 import { LiveChat } from 'youtube-chat'
-// 物理演算の関数をインポート
 import { spawnPhysicsComment } from './physics'
 
 let liveChat = null
@@ -36,20 +35,65 @@ export async function connectYouTube(channelIdOrUrl) {
     updateAndBroadcast({ youtubeConnected: true })
 
     liveChat.on('chat', (chatItem) => {
-      // 物理演算用には、これまで通りテキスト化して渡す（絵文字は :smile: などの文字になる）
-      const messageText = chatItem.message.map(part => part.text || '').join('')
-      const color = `hsl(${Math.random() * 360}, 70%, 60%)`
+      const message = chatItem.message.map(part => part.text || '').join('')
+      let color = `hsl(${Math.random() * 360}, 70%, 60%)` 
+      
+      const authorName = chatItem.author.name
+      const authorIcon = chatItem.author.thumbnail?.url || ''
 
-      spawnPhysicsComment(messageText, color)
+      // --- ★メンバー判定ロジックの強化 ---
+      let isMember = false
+      const badges = chatItem.author.badge
 
-      // コメントウィンドウ用には、詳細データを含めて送る
-      const { winComment } = windowsRef || {}
-      if (winComment && !winComment.isDestroyed()) {
-        winComment.webContents.send('new-comment', { 
-          text: messageText, 
-          messageParts: chatItem.message, // ★追加: 絵文字情報を含む配列
-          color 
+      if (Array.isArray(badges)) {
+        isMember = badges.some(b => {
+          const label = (b.label || '').toLowerCase()
+          // 1. 明確に「メンバー」を含む場合
+          if (label.includes('member') || label.includes('メンバー')) return true
+          
+          // 2. 「モデレーター(Moderator)」でも「認証済み(Verified)」でもないバッジを持っている場合
+          // (カスタムバッジなどでMemberという文字が入っていないケースへの対策)
+          if (!label.includes('moderator') && !label.includes('モデレーター') && 
+              !label.includes('verified') && !label.includes('確認済み') &&
+              !label.includes('owner') && !label.includes('オーナー')) {
+            return true
+          }
+          return false
         })
+      }
+      
+      // デバッグ用: メンバー判定されたユーザーをログに出力
+      if (isMember) {
+        console.log(`[Member Detected] ${authorName}`)
+      }
+
+      const superchat = chatItem.superchat
+      const supersticker = chatItem.supersticker
+
+      if (superchat && superchat.color) {
+        color = superchat.color
+      }
+
+      spawnPhysicsComment(message, color, authorName, authorIcon)
+
+      const { winComment, winOBS } = windowsRef || {}
+      
+      const commentData = { 
+        text: message, 
+        messageParts: chatItem.message, 
+        color,
+        authorName,
+        authorIcon,
+        isMember,
+        superchat,
+        supersticker
+      }
+
+      if (winComment && !winComment.isDestroyed()) {
+        winComment.webContents.send('new-comment', commentData)
+      }
+      if (winOBS && !winOBS.isDestroyed()) {
+        winOBS.webContents.send('new-comment', commentData)
       }
     })
 
