@@ -8,11 +8,8 @@ const OBS_View = () => {
   const [comments, setComments] = useState([])
   const commentBottomRef = useRef(null)
 
-  // ★修正: OBS_GAME_LAYOUTの構造変更に対応
-  // width, heightは「中身」のサイズ。frameに枠の情報が入っている前提。
   const { x: contentX, y: contentY, width: contentW, height: contentH, frame } = OBS_GAME_LAYOUT
   
-  // ★追加: 枠を含めた外側のサイズを計算
   const borderWidth = frame ? frame.borderWidth : 2
   const headerHeight = frame ? frame.headerHeight : 32
   
@@ -38,7 +35,15 @@ const OBS_View = () => {
   const avatarW = commentW
   const avatarH = infoH
 
+  // --- Info Scroll Logic ---
+  const [infoConfig, setInfoConfig] = useState({ messages: [], speed: 2, interval: 0.2 })
+  const scrollContainerRef = useRef(null)
+  const scrollItemsRef = useRef([]) // [{ id, text, x, width }]
+  const reqRef = useRef(null)
+  const nextMsgIndexRef = useRef(0)
+
   useEffect(() => {
+    // イベントリスナー設定
     const handleSceneChange = (sceneName) => setCurrentScene(sceneName)
     if (window.api.onSceneChange) window.api.onSceneChange(handleSceneChange)
 
@@ -55,12 +60,23 @@ const OBS_View = () => {
       window.api.on('new-comment', handleNewComment)
     }
 
+    // Info Configの初期化と同期
+    window.api.getInfoConfig().then(cfg => {
+      if (cfg) setInfoConfig(cfg)
+    })
+    window.api.onInfoConfigUpdate(newCfg => {
+      setInfoConfig(newCfg)
+      // 設定変更時にインデックスをリセットしてもよいが、流れを止めないためにそのままにする
+    })
+
     return () => {
       if (window.api.removeAllListeners) {
         window.api.removeAllListeners('change-scene')
         window.api.removeAllListeners('lucky-hit')
         window.api.removeAllListeners('new-comment')
+        window.api.removeAllListeners('update-info-config')
       }
+      cancelAnimationFrame(reqRef.current)
     }
   }, [])
 
@@ -69,6 +85,111 @@ const OBS_View = () => {
       commentBottomRef.current.scrollIntoView({ behavior: 'smooth' })
     }
   }, [comments])
+
+  // --- Scroll Animation Loop ---
+  useEffect(() => {
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    const animate = () => {
+      const { messages, speed, interval } = infoConfig
+      const validMessages = messages.filter(m => m.enabled)
+
+      if (validMessages.length === 0) {
+        // メッセージがない場合は表示中のものを全てクリア
+        scrollItemsRef.current.forEach(item => item.element.remove())
+        scrollItemsRef.current = []
+        reqRef.current = requestAnimationFrame(animate)
+        return
+      }
+
+      // 1. 移動処理
+      const itemsToRemove = []
+      scrollItemsRef.current.forEach((item, index) => {
+        item.x -= speed
+        item.element.style.transform = `translateX(${item.x}px)`
+
+        // 画面左端へ消えたら削除
+        if (item.x + item.width < -100) {
+          itemsToRemove.push(index)
+        }
+      })
+
+      // 削除処理 (後ろから削除)
+      for (let i = itemsToRemove.length - 1; i >= 0; i--) {
+        const idx = itemsToRemove[i]
+        scrollItemsRef.current[idx].element.remove()
+        scrollItemsRef.current.splice(idx, 1)
+      }
+
+      // 2. 次のメッセージを追加するか判定
+      let shouldAdd = false
+      const containerWidth = infoW // コンテナ幅
+
+      if (scrollItemsRef.current.length === 0) {
+        // 誰もいないなら即追加
+        shouldAdd = true
+      } else {
+        const lastItem = scrollItemsRef.current[scrollItemsRef.current.length - 1]
+        const lastItemTail = lastItem.x + lastItem.width
+        
+        // インターバル計算: 画面幅 * interval
+        // interval=0 -> tailがコンテナ右端(containerWidth)を下回ったら次を追加
+        // interval=1 -> tailが 0 を下回ったら(完全に消えたら) + 待機なし で次を追加？
+        // ユーザー要望: "1" = 画面外に出たら。つまり tail < 0 になったら次が出る（画面幅分空く）
+        // gap = containerWidth * interval
+        // 次が出る条件: lastItemTail < (containerWidth - gap)
+        // 例: interval=0 -> gap=0 -> tail < width -> 右端に隙間なく続く
+        // 例: interval=1 -> gap=width -> tail < 0 -> 完全に消えてから右端に出る
+        
+        const gap = containerWidth * interval
+        if (lastItemTail < (containerWidth - gap)) {
+          shouldAdd = true
+        }
+      }
+
+      if (shouldAdd) {
+        // 次のメッセージを取得
+        if (nextMsgIndexRef.current >= validMessages.length) {
+          nextMsgIndexRef.current = 0
+        }
+        const msgData = validMessages[nextMsgIndexRef.current]
+        
+        // DOM要素作成
+        const el = document.createElement('div')
+        el.textContent = msgData.text
+        el.style.position = 'absolute'
+        el.style.whiteSpace = 'nowrap'
+        el.style.color = 'var(--col-pink)'
+        el.style.fontWeight = 'bold'
+        el.style.fontSize = '38px'
+        el.style.textShadow = '0 2px 4px rgba(0,0,0,0.8)'
+        el.style.top = '50%'
+        el.style.transform = `translate(${containerWidth}px, -50%)` // 初期位置は右端外、YはCSSで調整済みだがJSでも指定
+        el.style.marginTop = '-25px' // 簡易的なY中央寄せ補正 (fontSize/2程度)
+
+        container.appendChild(el)
+        
+        // 幅を取得
+        const width = el.getBoundingClientRect().width
+        
+        scrollItemsRef.current.push({
+          id: msgData.id + '-' + Date.now(),
+          x: containerWidth, // 右端からスタート
+          width: width,
+          element: el
+        })
+
+        nextMsgIndexRef.current++
+      }
+
+      reqRef.current = requestAnimationFrame(animate)
+    }
+
+    reqRef.current = requestAnimationFrame(animate)
+
+    return () => cancelAnimationFrame(reqRef.current)
+  }, [infoConfig, infoW]) // Configか幅が変わったらリスタート
 
   return (
     <div className={`obs-container scene-${currentScene}`}>
@@ -84,7 +205,6 @@ const OBS_View = () => {
 
       <div className={`scene-content main-scene ${currentScene === 'main' ? 'active' : ''}`}>
         
-        {/* ゲームウィンドウのサイズは計算済みの width/height (枠込み) を使用 */}
         <div className="tech-window game-window" style={{ left: x, top: y, width, height }}>
           <div className="window-header">
             <div className="window-title">🔵 GAME_CAPTURE.exe</div>
@@ -166,11 +286,9 @@ const OBS_View = () => {
             <div className="window-title">🟣 SYSTEM_STATUS</div>
             <div className="window-controls"><span/><span/><span/></div>
           </div>
-          {/* 文字を上下中央に配置 */}
-          <div className="window-body flex-center" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-            <div className="scrolling-text">
-              🎵 Now Playing: Cyber Pop Synth // 📢 Don't forget to Subscribe! // 🚀 System Engineer Gaming
-            </div>
+          {/* ★修正: CSSアニメーションからJS制御に変更するため、コンテナRefを設定 */}
+          <div className="window-body" style={{ position: 'relative', overflow: 'hidden' }} ref={scrollContainerRef}>
+             {/* JavaScriptで要素がここに追加されます */}
           </div>
         </div>
 
@@ -187,7 +305,6 @@ const OBS_View = () => {
 
       </div>
 
-      {/* ...Scenes... */}
       <div className={`scene-content op-scene ${currentScene === 'op' ? 'active' : ''}`}>
         <div className="pop-box"><h1>STARTING!</h1><div className="loader">Loading...</div></div>
       </div>
@@ -248,15 +365,7 @@ const OBS_View = () => {
         .rec-indicator { position: absolute; top: 10px; right: 10px; color: #ff5555; font-weight: bold; animation: blink 1s infinite; text-shadow: 0 0 5px red; }
         @keyframes blink { 50% { opacity: 0; } }
         
-        .scrolling-text { 
-          white-space: nowrap; 
-          font-size: 38px; 
-          font-weight: bold;
-          color: var(--col-pink); 
-          animation: scroll 15s linear infinite; 
-          text-shadow: 0 2px 4px rgba(0,0,0,0.8);
-        }
-        @keyframes scroll { from { transform: translateX(100%); } to { transform: translateX(-100%); } }
+        /* scrolling-text クラスと keyframes は削除し、JS制御に移行しました */
         
         .avatar-area { position: absolute; display: flex; align-items: center; justify-content: center; }
         .avatar-circle { width: 150px; height: 150px; background: #44475a; border: 4px solid var(--col-text); border-radius: 50%; background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="%2344475a"/><circle cx="50" cy="40" r="20" fill="white"/><path d="M20 90 Q50 60 80 90" fill="white"/></svg>'); background-size: cover; }

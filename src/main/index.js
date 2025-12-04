@@ -29,7 +29,17 @@ const store = new Store({
       micName: 'マイク'
     },
     youtubeConfig: { channelId: '' },
-    commentLifeTime: 15000
+    commentLifeTime: 15000,
+    // ★追加: 情報欄の設定
+    infoConfig: {
+      messages: [
+        { id: '1', text: '🎵 Now Playing: Cyber Pop Synth', enabled: true },
+        { id: '2', text: '📢 Don\'t forget to Subscribe!', enabled: true },
+        { id: '3', text: '🚀 System Engineer Gaming', enabled: true }
+      ],
+      speed: 2,      // ピクセル/フレーム
+      interval: 0.2  // 画面幅に対する比率 (0:直後, 1:画面外に出てから)
+    }
   }
 })
 
@@ -40,6 +50,7 @@ let winKeybind = null
 let winComment = null
 let winStatus = null
 let winLucky = null
+let winInfo = null // ★追加
 let isAdminInteractive = false
 
 function createWindows() {
@@ -99,9 +110,23 @@ function createWindows() {
   }
 
   // --- 2. User ---
-  winUser = new BrowserWindow({ ...commonConfig, width, height, x: 0, y: 0, alwaysOnTop: true })
+  winUser = new BrowserWindow({ 
+    ...commonConfig, 
+    width, 
+    height, 
+    x: 0, 
+    y: 0, 
+    alwaysOnTop: true,
+    resizable: false,            
+    type: 'toolbar',             
+    enableLargerThanScreen: true,
+    focusable: false             
+  })
+  
   winUser.setIgnoreMouseEvents(true, { forward: false })
+  
   winUser.on('ready-to-show', () => {
+    winUser.setBounds({ x: 0, y: 0, width, height })
     winUser.showInactive()
     winUser.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
     winUser.setAlwaysOnTop(true, 'screen-saver')
@@ -195,6 +220,24 @@ function createWindows() {
     winLucky.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'lucky' })
   }
 
+  // --- 8. Info Config Window (新規) ---
+  const infoBounds = getBounds('info', { x: 200, y: 200, width: 400, height: 500 })
+  winInfo = new BrowserWindow({ ...commonConfig, ...infoBounds, alwaysOnTop: true, resizable: true })
+  winInfo.on('resized', () => saveBounds('info', winInfo))
+  winInfo.on('moved', () => saveBounds('info', winInfo))
+  winInfo.on('close', () => saveBounds('info', winInfo))
+  winInfo.setIgnoreMouseEvents(true, { forward: false })
+  winInfo.on('ready-to-show', () => {
+    winInfo.show()
+    winInfo.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+    winInfo.setAlwaysOnTop(true, 'normal')
+  })
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    winInfo.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/index.html#/info`)
+  } else {
+    winInfo.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'info' })
+  }
+
   // --- Start ---
   initPhysics({ winAdmin, winUser, winOBS, winLucky })
   const obsConfig = store.get('obsConfig')
@@ -204,7 +247,6 @@ function createWindows() {
   registerShortcuts()
 }
 
-// ... (registerShortcuts, setupIpcHandlers は既存のまま) ...
 function registerShortcuts() {
   globalShortcut.unregisterAll()
   const defaults = {
@@ -219,7 +261,8 @@ function registerShortcuts() {
   if (keybinds.toggleAdminInput) {
     globalShortcut.register(keybinds.toggleAdminInput, () => {
       isAdminInteractive = !isAdminInteractive
-      const targetWindows = [winAdmin, winComment, winStatus, winLucky]
+      // winInfo も操作対象に追加
+      const targetWindows = [winAdmin, winComment, winStatus, winLucky, winInfo]
       targetWindows.forEach(win => {
         if (win && !win.isDestroyed()) {
           if (isAdminInteractive) win.setIgnoreMouseEvents(false)
@@ -256,7 +299,8 @@ function registerShortcuts() {
         { win: winComment, width: 300, height: 400 },
         { win: winStatus, width: 200, height: 100 },
         { win: winKeybind, width: 500, height: 400 },
-        { win: winLucky, width: 300, height: 200 }
+        { win: winLucky, width: 300, height: 200 },
+        { win: winInfo, width: 400, height: 500 } // 追加
       ]
       targets.forEach(({ win, width, height }) => {
         if (win && !win.isDestroyed() && win.isVisible()) {
@@ -326,6 +370,20 @@ function setupIpcHandlers() {
     return true
   })
 
+  // ★追加: Info Config Handlers
+  ipcMain.removeHandler('get-info-config')
+  ipcMain.handle('get-info-config', () => store.get('infoConfig'))
+  
+  ipcMain.removeHandler('set-info-config')
+  ipcMain.handle('set-info-config', (event, config) => {
+    store.set('infoConfig', config)
+    // 設定が更新されたらOBS ViewとInfo Windowに通知
+    if (winOBS && !winOBS.isDestroyed()) winOBS.webContents.send('update-info-config', config)
+    if (winInfo && !winInfo.isDestroyed()) winInfo.webContents.send('update-info-config', config)
+    return true
+  })
+
+
   ipcMain.removeAllListeners('spawn-comment')
   ipcMain.on('spawn-comment', (event, { text, color }) => {
     if (winComment && !winComment.isDestroyed()) {
@@ -334,7 +392,6 @@ function setupIpcHandlers() {
     spawnPhysicsComment(text, color)
   })
 
-  // ★重要修正: リサイズイベント時に強制的に保存する処理を追加
   ipcMain.removeAllListeners('resize-window')
   ipcMain.on('resize-window', (event, { width, height }) => {
     const win = BrowserWindow.fromWebContents(event.sender)
@@ -343,19 +400,16 @@ function setupIpcHandlers() {
       if (currentW !== width || currentH !== height) {
         win.setContentSize(Math.ceil(width), Math.ceil(height))
         
-        // --- ここから追加 ---
-        // イベントが発火しない場合に備えて、ここで直接保存する
         let name = null
         if (win === winAdmin) name = 'admin'
         if (win === winComment) name = 'comment'
         if (win === winStatus) name = 'status'
         if (win === winLucky) name = 'lucky'
+        if (win === winInfo) name = 'info' // 追加
 
         if (name) {
-          // getBoundsはウィンドウ全体の位置とサイズを返します
           store.set(`windowBounds.${name}`, win.getBounds())
         }
-        // --- ここまで ---
       }
     }
   })
@@ -374,15 +428,12 @@ function setupIpcHandlers() {
 
   ipcMain.removeAllListeners('change-scene')
   ipcMain.on('change-scene', (event, sceneName) => {
-    // 1. 各ウィンドウへ通知
     const targetWindows = [winAdmin, winUser, winOBS, winStatus]
     targetWindows.forEach(win => {
       if (win && !win.isDestroyed()) {
         win.webContents.send('change-scene', sceneName)
       }
     })
-
-    // 2. 物理エンジンの状態更新 (Main以外なら停止＆非表示)
     updatePhysicsState(sceneName)
   })
 }

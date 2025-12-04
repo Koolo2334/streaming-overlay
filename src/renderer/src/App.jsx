@@ -5,7 +5,8 @@ import KeybindManager from './components/KeybindManager'
 import CommentWindow from './components/CommentWindow'
 import StatusWindow from './components/StatusWindow'
 import OBS_View from './components/OBS_View'
-import LuckyLogWindow from './components/LuckyLogWindow' // ★追加
+import LuckyLogWindow from './components/LuckyLogWindow'
+import InfoPanel from './components/InfoPanel' // ★追加
 
 const getHashRoute = () => {
   const hash = window.location.hash
@@ -28,7 +29,8 @@ function App() {
     else if (currentHash === 'keybind') document.title = "Overlay_KEYBIND_Manager"
     else if (currentHash === 'comment') document.title = "Overlay_COMMENT_Box"
     else if (currentHash === 'status') document.title = "Overlay_STATUS_Box"
-    else if (currentHash === 'lucky') document.title = "Overlay_LUCKY_Log" // ★追加
+    else if (currentHash === 'lucky') document.title = "Overlay_LUCKY_Log"
+    else if (currentHash === 'info') document.title = "Overlay_INFO_Config" // ★追加
 
     return () => window.removeEventListener('hashchange', handleHashChange)
   }, [currentHash])
@@ -55,9 +57,8 @@ function App() {
   if (currentHash === 'keybind') return <KeybindManager />
   if (currentHash === 'comment') return <CommentWindow />
   if (currentHash === 'status') return <StatusWindow />
-  
-  // ★追加
   if (currentHash === 'lucky') return <LuckyLogWindow />
+  if (currentHash === 'info') return <InfoPanel /> // ★追加
 
   return <div>Unknown Route: {currentHash}</div>
 }

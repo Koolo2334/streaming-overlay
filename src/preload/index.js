@@ -36,6 +36,11 @@ const api = {
   disconnectYouTube: () => ipcRenderer.invoke('disconnect-youtube'),
   getYoutubeStatus: () => ipcRenderer.invoke('get-youtube-status'),
   onYoutubeStatusUpdate: (callback) => ipcRenderer.on('update-youtube-status', (event, data) => callback(data)),
+
+  // Info Panel (New)
+  getInfoConfig: () => ipcRenderer.invoke('get-info-config'),
+  setInfoConfig: (config) => ipcRenderer.invoke('set-info-config', config),
+  onInfoConfigUpdate: (callback) => ipcRenderer.on('update-info-config', (event, data) => callback(data)),
   
   // イベント汎用
   on: (channel, callback) => ipcRenderer.on(channel, (event, data) => callback(data)),
