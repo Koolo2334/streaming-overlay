@@ -44,7 +44,7 @@ export async function reconnectOBS(config) {
     // Bitmask: General(1) | InputVolumeMeters(65536) = 65537
     // これを指定しないと、帯域節約のためOBS側から音量が送られてきません。
     await obs.connect(config.url, config.password, {
-      eventSubscriptions: 65537 
+      eventSubscriptions: 67583 
     })
     
     console.log('✅ Connected to OBS')
