@@ -6,8 +6,8 @@ export const VIRTUAL_HEIGHT = 1080;
 
 // --- OBSレイアウト設定 ---
 export const OBS_GAME_LAYOUT = {
-  x: 30,
-  y: 30,
+  x: 32,
+  y: 64,
   width: 1440,
   height: 810, // ★修正: 枠を含めない中身の高さ (846 - 32 - 4 = 810)
   
@@ -35,9 +35,9 @@ export function transformToUserView(x, y, objectWidth) {
 
   // ★修正: ゲーム画面（中身）の左上座標を計算
   // ウィンドウ位置(x) + 左枠線
-  const contentStartX = OBS_GAME_LAYOUT.x + OBS_GAME_LAYOUT.frame.borderWidth;
+  const contentStartX = OBS_GAME_LAYOUT.x;
   // ウィンドウ位置(y) + ヘッダー + 上枠線
-  const contentStartY = OBS_GAME_LAYOUT.y + OBS_GAME_LAYOUT.frame.headerHeight + OBS_GAME_LAYOUT.frame.borderWidth;
+  const contentStartY = OBS_GAME_LAYOUT.y;
 
   // 物理座標(x,y) から 中身の左上(contentStart) を引いて、UserView基準にする
   const userX = (x - contentStartX) * scale + centerOffsetX;

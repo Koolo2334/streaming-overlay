@@ -100,8 +100,12 @@ function createWindows() {
 
   // --- 2. User ---
   winUser = new BrowserWindow({ ...commonConfig, width, height, x: 0, y: 0, alwaysOnTop: true })
-  winUser.setIgnoreMouseEvents(true, { forward: true })
-  winUser.on('ready-to-show', () => winUser.showInactive())
+  winUser.setIgnoreMouseEvents(true, { forward: false })
+  winUser.on('ready-to-show', () => {
+    winUser.showInactive()
+    winUser.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+    winUser.setAlwaysOnTop(true, 'screen-saver')
+  })
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     winUser.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/index.html#/user`)
   } else {

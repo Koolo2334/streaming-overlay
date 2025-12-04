@@ -10,7 +10,7 @@ const OBS_View = () => {
 
   // ★修正: OBS_GAME_LAYOUTの構造変更に対応
   // width, heightは「中身」のサイズ。frameに枠の情報が入っている前提。
-  const { x, y, width: contentW, height: contentH, frame } = OBS_GAME_LAYOUT
+  const { x: contentX, y: contentY, width: contentW, height: contentH, frame } = OBS_GAME_LAYOUT
   
   // ★追加: 枠を含めた外側のサイズを計算
   const borderWidth = frame ? frame.borderWidth : 2
@@ -18,6 +18,8 @@ const OBS_View = () => {
   
   const width = contentW + (borderWidth * 2)
   const height = contentH + headerHeight + (borderWidth * 2)
+  const x = contentX - borderWidth
+  const y = contentY - headerHeight - borderWidth
 
   const FULL_WIDTH = 1920
   const FULL_HEIGHT = 1080
