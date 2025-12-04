@@ -25,60 +25,80 @@ export async function initOBS(windows, config) {
 export async function reconnectOBS(config) {
   currentConfig = config
   
-  // 再接続タイマーがあればキャンセル
   if (reconnectTimer) {
     clearTimeout(reconnectTimer)
     reconnectTimer = null
   }
   
   try {
-    // ★重要: リスナーを全削除して、イベントの重複発火を防ぐ
     obs.removeAllListeners('StreamStateChanged')
     obs.removeAllListeners('InputMuteStateChanged')
     obs.removeAllListeners('ConnectionClosed')
+    obs.removeAllListeners('InputVolumeMeters') // ★追加: 音量イベントのリスナー削除
 
-    // 意図的な切断（エラーは無視）
     try { await obs.disconnect() } catch (e) { /* ignore */ }
 
     console.log('🔄 Connecting to OBS...', config.url)
-    await obs.connect(config.url, config.password)
+    
+    // ★修正: 音量メーターイベント(InputVolumeMeters)を受信するために eventSubscriptions を指定
+    // Bitmask: General(1) | InputVolumeMeters(65536) = 65537
+    // これを指定しないと、帯域節約のためOBS側から音量が送られてきません。
+    await obs.connect(config.url, config.password, {
+      eventSubscriptions: 65537 
+    })
+    
     console.log('✅ Connected to OBS')
 
-    // 接続成功通知
     updateAndBroadcast({ obsConnected: true })
-
     await syncStatus()
 
     // --- イベントリスナー設定 ---
 
     obs.on('StreamStateChanged', (data) => {
-      // ストリーム状態が変わった = 接続は生きているので obsConnected: true も送る
       updateAndBroadcast({ isStreaming: data.outputActive, obsConnected: true })
     })
 
     obs.on('InputMuteStateChanged', (data) => {
       if (data.inputName === currentConfig.micName) {
-        // ミュートが変わった = 接続は生きているので obsConnected: true も送る
         updateAndBroadcast({ micMuted: data.inputMuted, obsConnected: true })
+      }
+    })
+
+    // ★追加: 音量イベントのハンドリング
+    obs.on('InputVolumeMeters', (data) => {
+      // 設定されたマイク名と一致する入力を探す
+      const input = data.inputs.find(d => d.inputName === currentConfig.micName)
+      if (input) {
+        // inputLevelsMul は [ [LeftMul, LeftPeak, LeftHold], [Right...] ] のような配列
+        // 基本的にチャンネル1の現在の振幅(0.0〜1.0)を使用
+        // ※データ構造はOBSのバージョンによりますが、v5では inputLevelsMul[0][0] が一般的
+        let volume = 0
+        if (input.inputLevelsMul && input.inputLevelsMul.length > 0) {
+           // チャンネルごとの最大値を取るなど調整可能。ここではチャンネル1の入力レベルを使用
+           volume = input.inputLevelsMul[0][0] 
+        }
+        
+        // レンダラーへ送信 (負荷軽減のため、本来はthrottleした方が良いが今回は直接送信)
+        const { winOBS } = windowsRef || {}
+        if (winOBS && !winOBS.isDestroyed()) {
+          winOBS.webContents.send('mic-volume', volume)
+        }
       }
     })
 
     obs.on('ConnectionClosed', () => {
       console.log('❌ OBS Connection Closed')
       updateAndBroadcast({ isStreaming: false, obsConnected: false })
-      // 切断されたら自動再接続をスケジュール
       scheduleReconnect()
     })
 
   } catch (error) {
     console.error('⚠️ Failed to connect to OBS:', error.message)
     updateAndBroadcast({ obsConnected: false })
-    // 接続失敗時も再接続をスケジュール
     scheduleReconnect()
   }
 }
 
-// ★追加: 自動再接続スケジューラー
 function scheduleReconnect() {
   if (reconnectTimer) return
   console.log('⏳ OBS Reconnect scheduled in 5s...')
@@ -107,17 +127,9 @@ async function syncStatus() {
   }
 }
 
-// ★修正: 常に現在の obsConnected 状態を含めて送信する
 function updateAndBroadcast(newStatus) {
-  // 状態をマージ
   currentStatus = { ...currentStatus, ...newStatus }
-
-  // AdminPanelが正しく状態を把握できるよう、常に obsConnected を含めたオブジェクトを作る
-  // (newStatusに obsConnected が含まれていればそれが優先され、なければ currentStatus のものが使われる)
-  const payload = { 
-    ...currentStatus, // 全ての現在の状態を含める
-    ...newStatus      // 新しい変更で上書き
-  }
+  const payload = { ...currentStatus, ...newStatus }
 
   const { winStatus, winAdmin, winOBS } = windowsRef || {}
   
@@ -127,7 +139,6 @@ function updateAndBroadcast(newStatus) {
   if (winAdmin && !winAdmin.isDestroyed()) {
     winAdmin.webContents.send('update-status', payload)
   }
-  // winOBSにも送っておく（念のため）
   if (winOBS && !winOBS.isDestroyed()) {
     winOBS.webContents.send('update-status', payload)
   }

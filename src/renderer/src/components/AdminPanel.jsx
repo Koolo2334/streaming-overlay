@@ -17,6 +17,9 @@ const AdminPanel = () => {
   const [showSettings, setShowSettings] = useState(false)
   const [obsConfig, setObsConfig] = useState({ url: '', password: '', micName: '' })
   const [youtubeConfig, setYoutubeConfig] = useState({ channelId: '' })
+  
+  // ★追加: Avatar State
+  const [avatarPreview, setAvatarPreview] = useState(null)
 
   const [currentScene, setCurrentScene] = useState('main')
 
@@ -62,6 +65,11 @@ const AdminPanel = () => {
     window.api.getObsConfig().then((config) => {
       if (config) setObsConfig((prev) => ({ ...prev, ...config }))
     })
+    
+    // ★追加: Avatar取得
+    window.api.getAvatarImage().then(url => {
+        if(url) setAvatarPreview(url)
+    })
 
     return () => {
       window.api.removeAllListeners('admin-mode-changed')
@@ -74,6 +82,7 @@ const AdminPanel = () => {
     if (showSettings) {
       window.api.getObsConfig().then(setObsConfig)
       window.api.getYoutubeConfig().then(setYoutubeConfig)
+      window.api.getAvatarImage().then(setAvatarPreview)
     }
   }, [showSettings])
 
@@ -134,6 +143,25 @@ const AdminPanel = () => {
   const handleChangeScene = (scene) => {
     window.api.changeScene(scene)
   }
+  
+  // ★追加: アバター画像アップロード処理
+  const handleAvatarFileChange = (e) => {
+    const file = e.target.files[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onload = (evt) => {
+        const dataUrl = evt.target.result
+        setAvatarPreview(dataUrl)
+        window.api.setAvatarImage(dataUrl)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+  
+  const handleResetAvatar = () => {
+      setAvatarPreview(null)
+      window.api.setAvatarImage(null)
+  }
 
   const handleSaveConfig = () => {
     Promise.all([
@@ -169,6 +197,25 @@ const AdminPanel = () => {
         {showSettings && (
           <div className="settings-modal">
             <h3>⚙️ Settings</h3>
+            
+            {/* ★追加: Avatar Settings */}
+            <div className="setting-group">
+                <h4>Avatar Image</h4>
+                <div className="control-row" style={{ alignItems: 'flex-start' }}>
+                    <div style={{ marginRight: '10px' }}>
+                        <div style={{ 
+                            width: '50px', height: '50px', 
+                            borderRadius: '50%', border: '2px solid #ccc',
+                            background: avatarPreview ? `url('${avatarPreview}') center/cover` : '#444'
+                        }}></div>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                        <input type="file" accept="image/*" onChange={handleAvatarFileChange} style={{ fontSize: '10px' }} />
+                        <button onClick={handleResetAvatar} className="btn danger" style={{ marginTop: '5px', padding: '2px 8px' }}>Reset to Default</button>
+                    </div>
+                </div>
+            </div>
+
             <div className="setting-group">
               <h4>OBS Studio</h4>
               <div className="control-row">
@@ -380,7 +427,6 @@ const AdminPanel = () => {
           align-items: center; 
           margin-bottom: 5px; 
           font-size: 11px;
-          /* ★横並びを防ぐため width: 100% を指定 */
           width: 100%;
         }
         .control-row label { 
@@ -403,11 +449,11 @@ const AdminPanel = () => {
           z-index: 100;
           padding: 15px;
           display: flex; 
-          flex-direction: column; /* ★ここが重要（縦並びにする） */
+          flex-direction: column;
         }
         .setting-group { 
           margin-bottom: 15px; 
-          width: 100%; /* 幅いっぱい */
+          width: 100%; 
         }
         .modal-actions { 
           margin-top: auto; 

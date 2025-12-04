@@ -30,7 +30,6 @@ const store = new Store({
     },
     youtubeConfig: { channelId: '' },
     commentLifeTime: 15000,
-    // ★追加: 情報欄の設定
     infoConfig: {
       messages: [
         { id: '1', text: '🎵 Now Playing: Cyber Pop Synth', enabled: true },
@@ -39,7 +38,9 @@ const store = new Store({
       ],
       speed: 2,      // ピクセル/フレーム
       interval: 0.2  // 画面幅に対する比率 (0:直後, 1:画面外に出てから)
-    }
+    },
+    // ★追加: アバター画像 (Base64文字列などを想定、初期値はnull)
+    avatarImage: null 
   }
 })
 
@@ -50,14 +51,13 @@ let winKeybind = null
 let winComment = null
 let winStatus = null
 let winLucky = null
-let winInfo = null // ★追加
+let winInfo = null
 let isAdminInteractive = false
 
 function createWindows() {
   const primaryDisplay = screen.getPrimaryDisplay()
   const { width, height } = primaryDisplay.bounds
 
-  // ★追加: リファラー削除処理 (403 Forbidden対策の決定版)
   session.defaultSession.webRequest.onBeforeSendHeaders(
     { urls: ['*://*.googleusercontent.com/*', '*://*.ggpht.com/*', '*://*.youtube.com/*'] },
     (details, callback) => {
@@ -82,7 +82,7 @@ function createWindows() {
       sandbox: false,
       contextIsolation: true,
       backgroundThrottling: false,
-      webSecurity: false // ★念のため追加 (CSP問題回避)
+      webSecurity: false
     }
   }
 
@@ -122,9 +122,7 @@ function createWindows() {
     enableLargerThanScreen: true,
     focusable: false             
   })
-  
   winUser.setIgnoreMouseEvents(true, { forward: false })
-  
   winUser.on('ready-to-show', () => {
     winUser.setBounds({ x: 0, y: 0, width, height })
     winUser.showInactive()
@@ -220,7 +218,7 @@ function createWindows() {
     winLucky.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'lucky' })
   }
 
-  // --- 8. Info Config Window (新規) ---
+  // --- 8. Info Config Window ---
   const infoBounds = getBounds('info', { x: 200, y: 200, width: 400, height: 500 })
   winInfo = new BrowserWindow({ ...commonConfig, ...infoBounds, alwaysOnTop: true, resizable: true })
   winInfo.on('resized', () => saveBounds('info', winInfo))
@@ -261,7 +259,6 @@ function registerShortcuts() {
   if (keybinds.toggleAdminInput) {
     globalShortcut.register(keybinds.toggleAdminInput, () => {
       isAdminInteractive = !isAdminInteractive
-      // winInfo も操作対象に追加
       const targetWindows = [winAdmin, winComment, winStatus, winLucky, winInfo]
       targetWindows.forEach(win => {
         if (win && !win.isDestroyed()) {
@@ -300,7 +297,7 @@ function registerShortcuts() {
         { win: winStatus, width: 200, height: 100 },
         { win: winKeybind, width: 500, height: 400 },
         { win: winLucky, width: 300, height: 200 },
-        { win: winInfo, width: 400, height: 500 } // 追加
+        { win: winInfo, width: 400, height: 500 }
       ]
       targets.forEach(({ win, width, height }) => {
         if (win && !win.isDestroyed() && win.isVisible()) {
@@ -370,19 +367,31 @@ function setupIpcHandlers() {
     return true
   })
 
-  // ★追加: Info Config Handlers
+  // Info Config Handlers
   ipcMain.removeHandler('get-info-config')
   ipcMain.handle('get-info-config', () => store.get('infoConfig'))
-  
   ipcMain.removeHandler('set-info-config')
   ipcMain.handle('set-info-config', (event, config) => {
     store.set('infoConfig', config)
-    // 設定が更新されたらOBS ViewとInfo Windowに通知
     if (winOBS && !winOBS.isDestroyed()) winOBS.webContents.send('update-info-config', config)
     if (winInfo && !winInfo.isDestroyed()) winInfo.webContents.send('update-info-config', config)
     return true
   })
 
+  // ★追加: Avatar Handlers
+  ipcMain.removeHandler('get-avatar-image')
+  ipcMain.handle('get-avatar-image', () => store.get('avatarImage'))
+  
+  ipcMain.removeHandler('set-avatar-image')
+  ipcMain.handle('set-avatar-image', (event, dataUrl) => {
+    store.set('avatarImage', dataUrl)
+    // 更新を各ウィンドウに通知
+    const targets = [winOBS, winAdmin] 
+    targets.forEach(win => {
+        if(win && !win.isDestroyed()) win.webContents.send('update-avatar-image', dataUrl)
+    })
+    return true
+  })
 
   ipcMain.removeAllListeners('spawn-comment')
   ipcMain.on('spawn-comment', (event, { text, color }) => {
@@ -405,7 +414,7 @@ function setupIpcHandlers() {
         if (win === winComment) name = 'comment'
         if (win === winStatus) name = 'status'
         if (win === winLucky) name = 'lucky'
-        if (win === winInfo) name = 'info' // 追加
+        if (win === winInfo) name = 'info'
 
         if (name) {
           store.set(`windowBounds.${name}`, win.getBounds())
