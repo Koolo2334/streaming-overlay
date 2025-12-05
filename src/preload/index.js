@@ -3,7 +3,12 @@ import { electronAPI } from '@electron-toolkit/preload'
 
 const api = {
   // --- Physics & Window ---
-  onPhysicsUpdate: (callback) => ipcRenderer.on('physics-update', (event, data) => callback(data)),
+  onPhysicsUpdate: (callback) => {
+    const listener = (event, data) => callback(data)
+    ipcRenderer.on('physics-update', listener)
+    // 解除用の関数を返す
+    return () => ipcRenderer.removeListener('physics-update', listener)
+  },
   onLuckyHit: (callback) => ipcRenderer.on('lucky-hit', (event, data) => callback(data)),
   
   spawnComment: (text, color) => ipcRenderer.send('spawn-comment', { text, color }),

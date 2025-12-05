@@ -87,13 +87,16 @@ const EffectCanvas = ({ viewMode }) => {
     }
     render()
 
-    const removeListener = window.api.onPhysicsUpdate((data) => {
+    const removePhysicsListener = window.api.onPhysicsUpdate((data) => {
       bodiesRef.current = data
     })
 
     return () => {
       window.removeEventListener('resize', handleResize)
       cancelAnimationFrame(animationFrameId)
+      
+      // ★追加: コンポーネントのアンマウント時や再実行時にリスナーを削除する
+      removePhysicsListener()
     }
   }, [viewMode])
 
