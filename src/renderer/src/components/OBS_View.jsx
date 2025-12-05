@@ -48,6 +48,11 @@ const OBS_View = () => {
   const [bootLogs, setBootLogs] = useState([])
   const [bootProgress, setBootProgress] = useState(0)
   
+  // ED State
+  const [edPhase, setEdPhase] = useState(0) // 0: GUI Shutdown, 1: Console Message
+  const [shutdownStatus, setShutdownStatus] = useState("") 
+  const [consoleText, setConsoleText] = useState("") 
+  
   const [gameActive, setGameActive] = useState(false)
   
   // --- Avatar & Audio State ---
@@ -70,11 +75,22 @@ const OBS_View = () => {
     timer: null
   })
 
+  // タイプライター用Ref
+  const typewriterRef = useRef({
+    text: "See you next time!",
+    index: 0,
+    timer: null
+  })
+
   useEffect(() => {
     const handleSceneChange = (sceneName) => {
         setCurrentScene((prev) => {
             if (prev === 'op' && sceneName === 'main') {
                 handleTransitionOpToMain()
+                return sceneName
+            }
+            if (prev === 'main' && sceneName === 'ed') {
+                handleTransitionMainToEd()
                 return sceneName
             }
             setVisualMode(sceneName)
@@ -124,6 +140,7 @@ const OBS_View = () => {
       cancelAnimationFrame(reqRef.current)
       cancelAnimationFrame(audioAnimRef.current)
       clearTimeout(bootStateRef.current.timer)
+      clearTimeout(typewriterRef.current.timer)
     }
   }, [])
 
@@ -222,12 +239,14 @@ const OBS_View = () => {
     bootStateRef.current.progress = val
     setBootProgress(val)
   }
+  
   const BOOT_PHASES = [
     { name: "HARDWARE_INIT", baseProgress: 0, steps: [ { text: "BIOS DATE 01/01/2025 12:34:56 VER 2.1.0", delay: 800 }, { text: "CPU: QUANTUM CORE i99 128-CORE DETECTED", delay: 600 }, { text: "CHECKING NVRAM..", delay: 400, suffix: " [ OK ]" }, { text: "DRAM FREQUENCY: 6400MHz", delay: 400 }, { text: "USB CONTROLLER INITIALIZED", delay: 300 } ] },
     { name: "DRIVERS_LOAD", baseProgress: 20, steps: [ { text: "LOADING KERNEL IMAGE", delay: 1200, progressAdd: 5, suffix: "... 100%" }, { text: "MOUNTING FILESYSTEM [ROOT]", delay: 800, suffix: " [ OK ]" }, { text: "INIT: GPU DRIVER (RTX_9090_TI)", delay: 1500, progressAdd: 10 }, { text: "INIT: AUDIO SUBSYSTEM", delay: 600 }, { text: "INIT: NETWORK ADAPTER (10GbE)", delay: 900 } ] },
     { name: "SYSTEM_SERVICES", baseProgress: 60, steps: [ { text: "STARTING: POWER MANAGEMENT", delay: 400, suffix: " [ OK ]" }, { text: "STARTING: CRON DAEMON", delay: 300, suffix: " [ OK ]" }, { text: "STARTING: SECURITY AUDIT", delay: 600 }, { text: "CONNECTING TO STREAM SERVERS...", delay: 2000, progressAdd: 15, suffix: " CONNECTED" }, { text: "SYNCING TIME WITH NTP...", delay: 500, suffix: " [ OK ]" } ] },
     { name: "USER_SPACE", baseProgress: 90, steps: [ { text: "PREPARING USER SESSION", delay: 800 }, { text: "LOADING OVERLAY CONFIGURATION", delay: 600 }, { text: "WAITING FOR SYSTEM READY...", delay: 1500 } ] }
   ]
+
   const runBootSequence = async () => {
     if (!bootStateRef.current.isRunning) return
     const { phase, textIndex } = bootStateRef.current
@@ -258,6 +277,7 @@ const OBS_View = () => {
     if (nextTextIndex >= currentPhaseData.steps.length) { bootStateRef.current.phase = phase + 1; bootStateRef.current.textIndex = 0 } else { bootStateRef.current.textIndex = nextTextIndex }
     runBootSequence()
   }
+
   const startBootLoop = () => {
     bootStateRef.current.isRunning = false
     clearTimeout(bootStateRef.current.timer) 
@@ -266,6 +286,7 @@ const OBS_View = () => {
     updateProgress(0)
     runBootSequence()
   }
+
   const handleTransitionOpToMain = async () => {
       bootStateRef.current.isRunning = false
       setVisualMode('transition')
@@ -286,7 +307,21 @@ const OBS_View = () => {
       }
       setVisualMode('main')
   }
+
+  const handleTransitionMainToEd = async () => {
+      setVisualMode('ed')
+  }
+
   const wait = (ms) => new Promise(resolve => { bootStateRef.current.timer = setTimeout(resolve, ms) })
+
+  const runTypewriter = () => {
+    const { text, index } = typewriterRef.current
+    if (index < text.length) {
+        setConsoleText((prev) => prev + text.charAt(index))
+        typewriterRef.current.index++
+        typewriterRef.current.timer = setTimeout(runTypewriter, 50)
+    }
+  }
 
   useEffect(() => {
     if (visualMode === 'op') {
@@ -299,6 +334,44 @@ const OBS_View = () => {
         clearTimeout(bootStateRef.current.timer)
         const timer = setTimeout(() => { setGameActive(true) }, 1500)
         return () => clearTimeout(timer)
+    } else if (visualMode === 'ed') {
+        // ★修正: ED遷移完了時にGameActiveをOFFにする（裏画面を消す・物理演算停止）
+        setGameActive(false)
+        bootStateRef.current.isRunning = false
+        clearTimeout(bootStateRef.current.timer)
+        
+        // ED Sequence Logic
+        setEdPhase(0)
+        
+        const shutdownSteps = [
+            { text: "Initiating Shutdown Sequence...", delay: 800 },
+            { text: "Closing Network Connections...", delay: 600 },
+            { text: "Terminating: GAME_CAPTURE.exe", delay: 1000 },
+            { text: "Stopping Audio Engine...", delay: 500 },
+            { text: "Terminating: CHAT_STREAM.log", delay: 800 },
+            { text: "Saving Configuration...", delay: 600 },
+            { text: "Terminating: SYSTEM_STATUS", delay: 700 },
+            { text: "Flushing Disk Cache...", delay: 900 },
+            { text: "Power Off...", delay: 1000 }
+        ]
+        
+        const runShutdownSequence = async () => {
+            for (const step of shutdownSteps) {
+                setShutdownStatus(step.text)
+                await wait(step.delay)
+            }
+            // 全ステップ完了後
+            setEdPhase(1) 
+            
+            // Start Typewriter
+            typewriterRef.current.index = 0
+            setConsoleText("")
+            await wait(500)
+            runTypewriter()
+        }
+        
+        runShutdownSequence()
+        
     } else {
         setGameActive(false)
         bootStateRef.current.isRunning = false
@@ -383,7 +456,8 @@ const OBS_View = () => {
       <div className={`full-cover-bg ${visualMode !== 'main' ? 'visible' : ''}`} />
 
       {/* --- MAIN SCENE --- */}
-      <div className={`scene-content main-scene ${visualMode === 'main' ? 'active' : ''}`}>
+      {/* gameActiveがfalseのときは物理演算停止・裏の表示も基本的に不要だが、遷移中は表示しておく制御 */}
+      <div className={`scene-content main-scene ${(visualMode === 'main') ? 'active' : ''}`}>
         
         {/* Game Capture Window */}
         <div className="tech-window game-window" style={{ left: x, top: y, width, height }}>
@@ -446,9 +520,6 @@ const OBS_View = () => {
           <div className="window-body" style={{ position: 'relative', overflow: 'hidden' }} ref={scrollContainerRef}></div>
         </div>
         
-        {/* ★修正: Canvas専用のクリッピングコンテナを画面全体に被せる
-             このコンテナは1920x1080固定で、overflow: hiddenを持つ。
-             これにより、内部のCanvasがどれだけ大きくても画面外にはみ出すことがなくなる。 */}
         <div 
             className="canvas-clipper-container"
             style={{
@@ -457,12 +528,11 @@ const OBS_View = () => {
                 left: 0,
                 width: '1920px',
                 height: '1080px',
-                overflow: 'hidden', // ★ここが重要: 画面外を切り取る
+                overflow: 'hidden',
                 pointerEvents: 'none',
                 zIndex: 5
             }}
         >
-            {/* アニメーション用のラッパー（アバターの位置に配置） */}
             <div
                 className="visualizer-wrapper"
                 style={{
@@ -476,10 +546,9 @@ const OBS_View = () => {
                     justifyContent: 'center',
                     opacity: 0, 
                     transform: 'scale(0.9)',
-                    animation: visualMode === 'main' ? 'slideUpFade 0.6s ease-out 1.2s forwards' : 'none'
+                    animation: (visualMode === 'main') ? 'slideUpFade 0.6s ease-out 1.2s forwards' : 'none'
                 }}
             >
-                {/* Canvas本体（300x300） */}
                 <canvas ref={audioCanvasRef} className="voice-canvas" style={{ display: 'block' }} />
             </div>
         </div>
@@ -500,7 +569,7 @@ const OBS_View = () => {
         </div>
       </div>
 
-      {/* --- OP SCENE --- */}
+      {/* --- OP SCENE (Boot) --- */}
       <div className={`scene-content op-scene ${(visualMode === 'op' || visualMode === 'transition') ? 'active' : ''}`}>
         <div className="boot-screen">
           <div className="boot-log">
@@ -514,9 +583,25 @@ const OBS_View = () => {
         </div>
       </div>
 
-      {/* --- ED SCENE --- */}
+      {/* --- ED SCENE (Shutdown GUI & Console) --- */}
       <div className={`scene-content ed-scene ${visualMode === 'ed' ? 'active' : ''}`}>
-        <div className="pop-box"><h1>SEE YOU!</h1><p>Thanks for watching</p></div>
+        {/* Phase 0: GUI Shutdown (Full Screen) */}
+        {edPhase === 0 && (
+            <div className="shutdown-gui">
+                <div className="spinner"></div>
+                <div className="shutdown-text">Shutting down...</div>
+                <div className="shutdown-detail">{shutdownStatus}</div>
+            </div>
+        )}
+        
+        {/* Phase 1: Console Typewriter Message (Full Screen) */}
+        {edPhase === 1 && (
+            <div className="shutdown-console-final">
+                <div className="console-center-text">
+                    {consoleText}<span className="blink-cursor">_</span>
+                </div>
+            </div>
+        )}
       </div>
 
       {/* Lucky Overlay */}
@@ -649,6 +734,63 @@ const OBS_View = () => {
         .lucky-message-text { font-size: 32px; font-weight: 800; color: white; line-height: 1.4; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
         .lucky-emoji { height: 1.2em; vertical-align: middle; margin: 0 4px; }
         @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+        
+        /* --- ED GUI Styles (Full Screen) --- */
+        .shutdown-gui {
+            width: 100%;
+            height: 100%;
+            /* ★修正: 全画面かつ不透明な背景色 */
+            background: var(--col-win-bg);
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            /* 枠線を削除 */
+            border: none;
+            border-radius: 0;
+            box-shadow: none;
+            animation: fadeIn 0.5s forwards;
+        }
+
+        .spinner {
+            width: 60px; height: 60px;
+            border: 6px solid var(--col-border);
+            border-top: 6px solid var(--col-cyan);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        .shutdown-text {
+            font-size: 32px;
+            font-weight: bold;
+            color: var(--col-text);
+            margin-bottom: 30px;
+        }
+        
+        .shutdown-detail {
+            font-size: 18px;
+            color: #888;
+            height: 24px;
+            text-transform: uppercase;
+            font-family: 'Consolas', monospace;
+            animation: fadeIn 0.3s;
+        }
+
+        .shutdown-console-final {
+            width: 100%; height: 100%;
+            background: black;
+            display: flex; align-items: center; justify-content: center;
+            animation: fadeIn 1s forwards;
+        }
+
+        .console-center-text {
+            font-family: 'Consolas', monospace;
+            font-size: 48px;
+            font-weight: bold;
+            color: var(--col-text);
+            /* 光らせない */
+            text-shadow: none; 
+        }
       `}</style>
     </div>
   )
